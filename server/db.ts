@@ -157,8 +157,16 @@ export interface DatabaseData {
   nextOrderSequence: number;
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const isServerless = !!(
+  process.env.NETLIFY ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env.NETLIFY_SERVERLESS
+);
+
+const DATA_DIR = isServerless ? '/tmp' : path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'hotel_malabar.json');
+const BUNDLED_DATA_FILE = path.join(process.cwd(), 'data', 'hotel_malabar.json');
 
 // Helper to calculate delivery charge
 export function calculateDeliveryFee(distanceKm: number, settings: DeliverySettingsRecord): number {
@@ -221,6 +229,22 @@ class CentralDatabase {
       }
       if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (!parsed.restaurantProfile) {
+          parsed.restaurantProfile = this.getDefaultRestaurantProfile();
+        }
+        if (parsed.deliverySettings) {
+          if (!parsed.deliverySettings.openingTime) parsed.deliverySettings.openingTime = '07:00';
+          if (!parsed.deliverySettings.closingTime) parsed.deliverySettings.closingTime = '22:00';
+          if (!parsed.deliverySettings.manualStatus) {
+            parsed.deliverySettings.manualStatus = parsed.deliverySettings.isRestaurantOpen === false ? 'closed' : 'auto';
+          }
+        }
+        this.ensureAuthorizedAdmins(parsed);
+        this.saveData(parsed);
+        return parsed;
+      } else if (isServerless && fs.existsSync(BUNDLED_DATA_FILE)) {
+        const raw = fs.readFileSync(BUNDLED_DATA_FILE, 'utf8');
         const parsed = JSON.parse(raw);
         if (!parsed.restaurantProfile) {
           parsed.restaurantProfile = this.getDefaultRestaurantProfile();
