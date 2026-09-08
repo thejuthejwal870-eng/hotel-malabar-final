@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+  .font-brand {
+    font-family: 'Cinzel', serif;
+  }
+  .font-mono-receipt {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom thermal receipt printing rules */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    width: 100% !important;
+  }
+
+  /* When printing, hide all main application elements */
+  #root {
+    display: none !important;
+  }
+
+  /* Only show the print container which can be placed directly in body */
+  #thermal-print-container {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 2mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  #thermal-print-container * {
+    visibility: visible !important;
+    color: #000000 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
