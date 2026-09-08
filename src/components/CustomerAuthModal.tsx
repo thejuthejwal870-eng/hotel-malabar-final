@@ -38,18 +38,17 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     setError(null);
     setSuccessMessage(null);
 
-    if (!phone || !firstName || !lastName || !password || !privacyPin) {
-      setError('Please complete all registration fields.');
+    const cleanPhone = phone.trim();
+    const cleanFirstName = firstName.trim();
+    const cleanLastName = lastName.trim();
+
+    if (!cleanPhone || !cleanFirstName || !cleanLastName || !password) {
+      setError('Please fill in First Name, Last Name, Phone Number, and Password.');
       return;
     }
 
     if (password.length < 8) {
-      setError('Main password must be at least 8 characters long.');
-      return;
-    }
-
-    if (privacyPin.length < 4) {
-      setError('Privacy PIN must be at least 4 digits/characters.');
+      setError('Password must be at least 8 characters long.');
       return;
     }
 
@@ -57,24 +56,43 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       setLoading(true);
       const res = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
         body: JSON.stringify({
-          phone: phone.trim(),
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
+          phone: cleanPhone,
+          firstName: cleanFirstName,
+          lastName: cleanLastName,
           password,
-          privacyPin: privacyPin.trim(),
         }),
       });
 
-      const data = await res.json();
+      const responseText = await res.text();
+      let data: any = null;
+      if (responseText && responseText.trim().length > 0) {
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          data = null;
+        }
+      }
+
       if (!res.ok) {
-        throw new Error(data.error || 'Registration failed');
+        const errorMsg =
+          data?.error ||
+          data?.message ||
+          (res.statusText ? `Registration error (${res.status}): ${res.statusText}` : 'Registration failed. Please try again.');
+        throw new Error(errorMsg);
+      }
+
+      if (!data || !data.token) {
+        throw new Error('Server returned an invalid response format. Please try again.');
       }
 
       onAuthSuccess(data.token, data.user);
     } catch (err: any) {
-      setError(err.message || 'Failed to create account.');
+      setError(err.message || 'Failed to create account. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -85,7 +103,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     setError(null);
     setSuccessMessage(null);
 
-    if (!phone || !password) {
+    const cleanPhone = phone.trim();
+    if (!cleanPhone || !password) {
       setError('Please enter your registered phone number and password.');
       return;
     }
@@ -94,16 +113,32 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       setLoading(true);
       const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
         body: JSON.stringify({
-          phone: phone.trim(),
+          phone: cleanPhone,
           password,
         }),
       });
 
-      const data = await res.json();
+      const responseText = await res.text();
+      let data: any = null;
+      if (responseText && responseText.trim().length > 0) {
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          data = null;
+        }
+      }
+
       if (!res.ok) {
-        throw new Error(data.error || 'Invalid credentials');
+        throw new Error(data?.error || 'Invalid phone number or password.');
+      }
+
+      if (!data || !data.token) {
+        throw new Error('Server returned an invalid login response. Please try again.');
       }
 
       onAuthSuccess(data.token, data.user);
@@ -119,7 +154,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     setError(null);
     setSuccessMessage(null);
 
-    if (!phone || !privacyPin || !newPassword) {
+    const cleanPhone = phone.trim();
+    const cleanPin = privacyPin.trim();
+
+    if (!cleanPhone || !cleanPin || !newPassword) {
       setError('Please provide phone number, your secret Privacy PIN, and new password.');
       return;
     }
@@ -133,17 +171,29 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       setLoading(true);
       const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
         body: JSON.stringify({
-          phone: phone.trim(),
-          privacyPin: privacyPin.trim(),
+          phone: cleanPhone,
+          privacyPin: cleanPin,
           newPassword,
         }),
       });
 
-      const data = await res.json();
+      const responseText = await res.text();
+      let data: any = null;
+      if (responseText && responseText.trim().length > 0) {
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          data = null;
+        }
+      }
+
       if (!res.ok) {
-        throw new Error(data.error || 'Recovery failed');
+        throw new Error(data?.error || 'Password recovery failed.');
       }
 
       setSuccessMessage('Password reset successfully! You can now log in.');
@@ -283,7 +333,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs text-[#c9dcce] font-medium">Strong Password (Min 8 Chars)</label>
+                <label className="block text-xs text-[#c9dcce] font-medium">Password (Min 8 Chars)</label>
                 <span className="text-[10px] text-[#8fa897]">Securely Hashed</span>
               </div>
               <div className="relative">
@@ -305,36 +355,6 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs text-[#dfb64c] font-medium">Separate Privacy PIN / Password</label>
-                <span className="text-[10px] text-[#dfb64c]/80">Additional Unlock Layer</span>
-              </div>
-              <div className="relative">
-                <KeyRound className="w-4 h-4 absolute left-3 top-3 text-[#dfb64c]" />
-                <input
-                  type={showPin ? 'text' : 'password'}
-                  required
-                  minLength={4}
-                  maxLength={8}
-                  value={privacyPin}
-                  onChange={(e) => setPrivacyPin(e.target.value)}
-                  placeholder="4 to 6 digit secret PIN"
-                  className="w-full bg-[#123620] border border-[#dfb64c]/50 rounded-xl pl-9 pr-10 py-2.5 text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3 top-2.5 text-[#799983] hover:text-[#fdfbf7]"
-                >
-                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              <p className="text-[10px] text-[#8fa897] mt-1">
-                Used for instant account recovery & privacy unlock without OTP.
-              </p>
             </div>
 
             <button
