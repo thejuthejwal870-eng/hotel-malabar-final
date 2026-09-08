@@ -1,0 +1,6 @@
+{
+  "name": "Hotel Malabar",
+  "description": "Premium food delivery and restaurant management system for Hotel Malabar with real-time order tracking, thermal KOT printing, and automated image watermarking.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
