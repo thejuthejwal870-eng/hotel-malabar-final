@@ -2,14 +2,44 @@ import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import jwt from 'jsonwebtoken';
 import { db, AUTHORIZED_ADMIN_PHONES } from './server/db.ts';
-import { createServer as createViteServer } from 'vite';
 
-const app = express();
+export const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'hotel-malabar-secure-secret-key-2026';
 
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+
+// Permissive CORS headers for API requests
+app.use((req: Request, res: Response, next: NextFunction) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// Normalize Netlify function URLs so both local (/api/...) and Netlify (/.netlify/functions/api/...) match cleanly
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.url.startsWith('/.netlify/functions/api')) {
+    req.url = req.url.replace('/.netlify/functions/api', '/api');
+  } else if (
+    !req.url.startsWith('/api') &&
+    (req.url.startsWith('/auth') ||
+      req.url.startsWith('/menu') ||
+      req.url.startsWith('/cart') ||
+      req.url.startsWith('/orders') ||
+      req.url.startsWith('/admin') ||
+      req.url.startsWith('/health') ||
+      req.url.startsWith('/delivery') ||
+      req.url.startsWith('/profile'))
+  ) {
+    req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
+  }
+  next();
+});
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -825,9 +855,10 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   next(err);
 });
 
-// Vite Middleware for SPA
-async function startServer() {
+// Vite Middleware for SPA & standalone server startup
+export async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -846,4 +877,15 @@ async function startServer() {
   });
 }
 
-startServer();
+const isServerless = !!(
+  process.env.NETLIFY ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env.NETLIFY_SERVERLESS
+);
+
+if (!isServerless) {
+  startServer();
+}
+
+export default app;
