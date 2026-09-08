@@ -8,7 +8,7 @@ export interface UserRecord {
   firstName: string;
   lastName: string;
   passwordHash: string;
-  privacyPinHash: string;
+  privacyPinHash?: string;
   role: 'customer' | 'admin';
   createdAt: string;
 }
@@ -1111,21 +1111,30 @@ class CentralDatabase {
     firstName: string;
     lastName: string;
     password: string;
-    privacyPin: string;
+    privacyPin?: string;
   }): { user: UserRecord; profile: CustomerProfileRecord } {
     const cleanPhone = data.phone.trim();
+    if (!cleanPhone) {
+      throw new Error('Phone number is required.');
+    }
     if (this.findUserByPhone(cleanPhone)) {
       throw new Error('Phone number is already registered. Please login.');
     }
-    if (data.password.length < 8) {
+    if (!data.password || data.password.length < 8) {
       throw new Error('Password must be at least 8 characters long.');
     }
-    if (!data.privacyPin || data.privacyPin.trim().length < 4) {
-      throw new Error('Privacy PIN must be at least 4 characters/digits.');
+    if (!data.firstName || !data.firstName.trim()) {
+      throw new Error('First name is required.');
+    }
+    if (!data.lastName || !data.lastName.trim()) {
+      throw new Error('Last name is required.');
     }
 
     const passwordHash = bcrypt.hashSync(data.password, 10);
-    const privacyPinHash = bcrypt.hashSync(data.privacyPin.trim(), 10);
+    const privacyPinHash =
+      data.privacyPin && data.privacyPin.trim().length >= 4
+        ? bcrypt.hashSync(data.privacyPin.trim(), 10)
+        : undefined;
 
     const newUser: UserRecord = {
       id: `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
@@ -1161,7 +1170,7 @@ class CentralDatabase {
 
   public verifyCustomerPin(userId: string, pin: string): boolean {
     const user = this.findUserById(userId);
-    if (!user) return false;
+    if (!user || !user.privacyPinHash) return false;
     return bcrypt.compareSync(pin.trim(), user.privacyPinHash);
   }
 
@@ -1169,6 +1178,9 @@ class CentralDatabase {
     const user = this.findUserByPhone(phone);
     if (!user) {
       throw new Error('User with this phone number not found.');
+    }
+    if (!user.privacyPinHash) {
+      throw new Error('No Privacy PIN was configured for this account. Please contact hotel management.');
     }
     const pinMatches = bcrypt.compareSync(pin.trim(), user.privacyPinHash);
     if (!pinMatches) {
