@@ -75,19 +75,38 @@ app.get('/api/health', (req: Request, res: Response) => {
 
 // Register
 app.post('/api/auth/register', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
   try {
-    const { phone, firstName, lastName, password, privacyPin } = req.body;
+    const { phone, firstName, lastName, password } = req.body || {};
 
-    if (!phone || !firstName || !lastName || !password || !privacyPin) {
-      return res.status(400).json({ error: 'All fields are strictly required.' });
+    if (!phone || !firstName || !lastName || !password) {
+      return res.status(400).json({
+        error: 'First Name, Last Name, Phone Number, and Password are all required.',
+      });
+    }
+
+    const cleanPhone = String(phone).trim();
+    const cleanFirstName = String(firstName).trim();
+    const cleanLastName = String(lastName).trim();
+    const cleanPassword = String(password);
+
+    if (!cleanPhone || !cleanFirstName || !cleanLastName || !cleanPassword) {
+      return res.status(400).json({
+        error: 'All fields must contain valid non-empty values.',
+      });
+    }
+
+    if (cleanPassword.length < 8) {
+      return res.status(400).json({
+        error: 'Password must be at least 8 characters long.',
+      });
     }
 
     const { user, profile } = db.registerCustomer({
-      phone,
-      firstName,
-      lastName,
-      password,
-      privacyPin,
+      phone: cleanPhone,
+      firstName: cleanFirstName,
+      lastName: cleanLastName,
+      password: cleanPassword,
     });
 
     const token = jwt.sign(
@@ -105,14 +124,17 @@ app.post('/api/auth/register', (req: Request, res: Response) => {
       createdAt: user.createdAt,
     };
 
-    res.status(201).json({
+    return res.status(201).json({
       message: 'Account created successfully. Welcome to Hotel Malabar!',
       token,
       user: safeUser,
       profile,
     });
   } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Registration failed' });
+    console.error('Customer registration error:', err);
+    return res.status(400).json({
+      error: err.message || 'Registration failed. Please try again.',
+    });
   }
 });
 
@@ -782,6 +804,25 @@ app.get('/api/admin/kot/:orderId', requireAdminAuth, (req: Request, res: Respons
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Handle unmatched API routes with clean JSON response
+app.all('/api/*', (req: Request, res: Response) => {
+  res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.path}` });
+});
+
+// Global API error handler
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error('Unhandled server error:', err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  if (req.path && req.path.startsWith('/api')) {
+    return res.status(err.status || 500).json({
+      error: err.message || 'Internal Server Error',
+    });
+  }
+  next(err);
 });
 
 // Vite Middleware for SPA
