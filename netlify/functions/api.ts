@@ -1,4 +1,24 @@
 import serverless from "serverless-http";
-import { app } from "../../server.ts";
+import { syncFromSupabase, syncToSupabase } from "../../server/supabase-sync.ts";
 
-export const handler = serverless(app);
+let appHandlerPromise: Promise<any> | null = null;
+
+async function getHandler() {
+  if (!appHandlerPromise) {
+    await syncFromSupabase();
+
+    const { app } = await import("../../server.ts");
+    appHandlerPromise = Promise.resolve(serverless(app));
+  }
+
+  return appHandlerPromise;
+}
+
+export const handler = async (event: any, context: any) => {
+  const appHandler = await getHandler();
+  const result = await appHandler(event, context);
+
+  await syncToSupabase();
+
+  return result;
+};
