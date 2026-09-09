@@ -229,7 +229,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
       }
       if (customersRes.ok) {
         const cData = await customersRes.json();
-        setCustomers(cData);
+        setCustomers(
+  cData.map((c: any) => ({
+    ...c.user,
+    profile: c.profile,
+    totalOrders: c.ordersCount,
+    totalSpent: c.totalSpent,
+    createdAt: c.user?.createdAt,
+  }))
+);;
       }
       if (profileRes.ok) {
         const pData = await profileRes.json();
