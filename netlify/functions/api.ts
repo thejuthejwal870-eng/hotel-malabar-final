@@ -13,21 +13,37 @@ async function getHandler() {
 }
 
 export const handler = async (event: any, context: any) => {
-  // Always load the latest database from Supabase before handling a request.
+  // Always load the latest valid database from Supabase first.
   await syncFromSupabase();
 
-  // Refresh the already-loaded database instance from /tmp.
+  // Reload the database instance from /tmp.
   const { db } = await import("../../server/db.ts");
   db.reloadFromFile();
 
   const appHandler = await getHandler();
   const result = await appHandler(event, context);
 
-  // Save only requests that can actually change database data.
   const method = String(event?.httpMethod || "").toUpperCase();
 
+  // Persist every database-changing request before the Lambda finishes.
   if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-    await syncToSupabase();
+    const saved = await syncToSupabase();
+
+    if (!saved) {
+      console.error("CRITICAL: Database change was not saved to Supabase.");
+
+      return {
+        ...result,
+        statusCode: 503,
+        body: JSON.stringify({
+          error: "Database save failed. Please try again.",
+        }),
+        headers: {
+          ...(result?.headers || {}),
+          "Content-Type": "application/json",
+        },
+      };
+    }
   }
 
   return result;
