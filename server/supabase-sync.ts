@@ -6,7 +6,9 @@ const DATA_FILE = path.join(DATA_DIR, 'hotel_malabar.json');
 
 function endpoint() {
   const url = process.env.SUPABASE_URL;
-  return url ? `${url.replace(/\/$/, '')}/rest/v1/hotel_malabar_data` : null;
+  return url
+    ? `${url.replace(/\/$/, '')}/rest/v1/hotel_malabar_data`
+    : null;
 }
 
 function authHeaders() {
@@ -53,7 +55,7 @@ export async function syncFromSupabase(): Promise<boolean> {
       return false;
     }
 
-    const rows = (await response.json()) as Array<{ data?: any }>;
+    const rows = await response.json() as Array<{ data?: any }>;
     const remoteData = rows?.[0]?.data;
 
     if (!isUsableDatabase(remoteData)) {
@@ -62,6 +64,7 @@ export async function syncFromSupabase(): Promise<boolean> {
     }
 
     fs.mkdirSync(DATA_DIR, { recursive: true });
+
     fs.writeFileSync(
       DATA_FILE,
       JSON.stringify(remoteData, null, 2),
@@ -103,40 +106,44 @@ export async function syncToSupabase(): Promise<boolean> {
       updated_at: new Date().toISOString(),
     });
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            ...headers,
-            Prefer: 'resolution=merge-duplicates,return=minimal',
-          },
-          body,
-        });
+    // First try to update the existing row.
+    const updateResponse = await fetch(`${url}?id=eq.1`, {
+      method: 'PATCH',
+      headers,
+      body,
+    });
 
-        if (response.ok) {
-          console.log('Hotel Malabar database saved to Supabase.');
-          return true;
-        }
-
-        console.error(
-          `Supabase write failed (attempt ${attempt}):`,
-          response.status,
-          await response.text()
-        );
-      } catch (error) {
-        console.error(
-          `Supabase write error (attempt ${attempt}):`,
-          error
-        );
-      }
-
-      if (attempt < 3) {
-        await new Promise(resolve =>
-          setTimeout(resolve, 400 * attempt)
-        );
-      }
+    if (updateResponse.ok) {
+      console.log('Hotel Malabar database updated in Supabase.');
+      return true;
     }
+
+    console.error(
+      'Supabase PATCH failed:',
+      updateResponse.status,
+      await updateResponse.text()
+    );
+
+    // If the row does not exist, create it.
+    const insertResponse = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        Prefer: 'return=minimal',
+      },
+      body,
+    });
+
+    if (insertResponse.ok) {
+      console.log('Hotel Malabar database inserted into Supabase.');
+      return true;
+    }
+
+    console.error(
+      'Supabase POST failed:',
+      insertResponse.status,
+      await insertResponse.text()
+    );
 
     return false;
   } catch (error) {
