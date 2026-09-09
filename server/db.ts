@@ -283,6 +283,15 @@ class CentralDatabase {
   private persist() {
     this.saveData(this.data);
   }
+    public reloadFromFile(): void {
+    try {
+      if (fs.existsSync(DATA_FILE)) {
+        this.data = this.loadOrInitialize();
+      }
+    } catch (err) {
+      console.error('Failed to reload database from file:', err);
+    }
+    }
 
   private getInitialData(): DatabaseData {
     const adminPassHash = bcrypt.hashSync('MalabarAdmin@2026', 10);
