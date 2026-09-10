@@ -48,7 +48,14 @@ import {
 } from '../types';
 import { WatermarkedImage } from './WatermarkedImage';
 import { applyWatermarkToImageFile, EXACT_WATERMARK_TEXT } from '../utils/watermark';
-import { playNewOrderChime, playTestChime, unlockAudio } from '../utils/audio';
+import {
+  playNewOrderChime,
+  playTestChime,
+  unlockAudio,
+  getCustomSoundName,
+  saveCustomSound,
+  resetCustomSound,
+} from '../utils/audio';f
 import { printThermalOrder } from '../utils/thermalPrinter';
 import { AdminProfileManager } from './AdminProfileManager';
 import { AdminCategoryManager } from './AdminCategoryManager';
@@ -286,7 +293,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     unlockAudio();
     playNewOrderChime();
   };
+    // Admin-only custom sound upload
+  const handleCustomSoundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
+    if (file.type !== 'audio/mpeg' && file.type !== 'audio/mp3') {
+      alert('Please select an MP3 audio file.');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > 4 * 1024 * 1024) {
+      alert('Please choose an MP3 file smaller than 4 MB.');
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        saveCustomSound(reader.result, file.name);
+        unlockAudio();
+        playNewOrderChime();
+        alert(`Custom sound saved: ${file.name}`);
+      }
+    };
+
+    reader.onerror = () => {
+      alert('Unable to read the sound file.');
+    };
+
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleResetCustomSound = () => {
+    resetCustomSound();
+    alert('Default Hotel Malabar sound restored.');
+  };
   // Toggle repeat sound reminder
   const handleToggleRepeatSound = () => {
     const next = !repeatSoundUntilAccepted;
@@ -1354,6 +1400,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                     <Bell className="w-4 h-4 text-[#dfb64c]" />
                     <span>Test Chime</span>
                   </button>
+                              {/* Admin-only Custom Sound Controls */}
+            <label
+              className="p-1.5 sm:px-2 sm:py-1.5 rounded-xl border border-[#245937] bg-[#123620] hover:bg-[#184428] text-stone-300 hover:text-[#dfb64c] text-xs flex items-center gap-1 transition-all cursor-pointer"
+              title="Upload a custom Hotel Malabar order notification MP3"
+            >
+              <Upload className="w-3.5 h-3.5 text-[#dfb64c]" />
+              <span className="hidden lg:inline text-[11px]">Custom Sound</span>
+              <input
+                type="file"
+                accept=".mp3,audio/mpeg,audio/mp3"
+                className="hidden"
+                onChange={handleCustomSoundUpload}
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={() => {
+                unlockAudio();
+                playNewOrderChime();
+              }}
+              className="p-1.5 sm:px-2 sm:py-1.5 rounded-xl border border-emerald-500/50 bg-[#123620] hover:bg-[#184428] text-emerald-300 text-xs flex items-center gap-1 transition-all cursor-pointer"
+              title="Test the currently selected custom Hotel Malabar sound"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline text-[11px]">Test Custom</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResetCustomSound}
+              className="p-1.5 sm:px-2 sm:py-1.5 rounded-xl border border-stone-600 bg-[#123620] hover:bg-[#184428] text-stone-300 text-xs flex items-center gap-1 transition-all cursor-pointer"
+              title="Restore the default Hotel Malabar sound"
+            >
+              <span className="hidden lg:inline text-[11px]">Default Sound</span>
+              <span className="lg:hidden text-[10px]">Default</span>
+            </button>
 
                   <button
                     onClick={handleToggleRepeatSound}
