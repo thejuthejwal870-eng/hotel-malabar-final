@@ -19,15 +19,24 @@ function validDatabase(data) {
 
 async function syncFromSupabase() {
   const cfg = supabaseConfig();
-  if (!cfg) return false;
+  if (!cfg) {
+    console.error('Supabase startup read skipped: configuration missing.');
+    return false;
+  }
   try {
     const response = await fetch(`${cfg.url}?id=eq.1&select=data`, {
       method: 'GET', headers: cfg.headers,
     });
-    if (!response.ok) return false;
+    if (!response.ok) {
+      console.error('Supabase startup read failed:', response.status);
+      return false;
+    }
     const rows = await response.json();
     const data = rows?.[0]?.data;
-    if (!validDatabase(data)) return false;
+    if (!validDatabase(data)) {
+      console.error('Supabase startup read skipped: database row is invalid.');
+      return false;
+    }
     fs.mkdirSync('/tmp', { recursive: true });
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
     console.log('Hotel Malabar database loaded from Supabase.');
@@ -57,6 +66,7 @@ async function syncToSupabase() {
       headers: { ...cfg.headers, Prefer: 'return=minimal' },
       body,
     });
+    if (insert.ok) console.log('Hotel Malabar database inserted into Supabase.');
     return insert.ok;
   } catch (error) {
     console.error('Supabase write failed:', error.message);
@@ -65,10 +75,11 @@ async function syncToSupabase() {
 }
 
 (async () => {
+  // Load the shared database BEFORE the application starts.
   await syncFromSupabase();
 
   // db.ts writes atomically with renameSync(tmp, /tmp/hotel_malabar.json).
-  // Hook that final rename so every admin/customer change is persisted to Supabase.
+  // Hook that final rename so every customer/admin database change is persisted.
   const originalRenameSync = fs.renameSync;
   fs.renameSync = function (oldPath, newPath) {
     const result = originalRenameSync.call(fs, oldPath, newPath);
@@ -78,5 +89,5 @@ async function syncToSupabase() {
     return result;
   };
 
-  require('../dist/server.cjs');
+  require('../dist/app.cjs');
 })();
