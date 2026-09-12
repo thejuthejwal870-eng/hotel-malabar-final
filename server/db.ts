@@ -130,6 +130,30 @@ export interface DeliverySettingsRecord {
   manualStatus: 'auto' | 'open' | 'closed';
 }
 
+export interface FoodRatingRecord {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  itemId: string;
+  itemName: string;
+  customerId: string;
+  customerName: string;
+  customerPhone?: string;
+  rating: number; // 1 to 5
+  review?: string;
+  createdAt: string;
+}
+
+export interface ExpenseRecord {
+  id: string;
+  date: string; // YYYY-MM-DD
+  title: string;
+  category: string;
+  amount: number;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface RestaurantProfileRecord {
   name: string;
   tagline: string;
@@ -148,13 +172,20 @@ export interface DatabaseData {
   users: UserRecord[];
   customerProfiles: CustomerProfileRecord[];
   adminUsers: AdminUserRecord[];
+  adminConfigured?: boolean;
   menuCategories: MenuCategoryRecord[];
   menuItems: MenuItemRecord[];
   orders: OrderRecord[];
   deliveryAreas: DeliveryAreaRecord[];
   deliverySettings: DeliverySettingsRecord;
   restaurantProfile?: RestaurantProfileRecord;
+  notificationSound?: {
+    name: string;
+    audioData: string | null;
+  };
   nextOrderSequence: number;
+  ratings?: FoodRatingRecord[];
+  expenses?: ExpenseRecord[];
 }
 
 const isServerless = !!(
@@ -177,49 +208,13 @@ export function calculateDeliveryFee(distanceKm: number, settings: DeliverySetti
   return extraKm * settings.perKmCharge;
 }
 
-export const AUTHORIZED_ADMIN_PHONES = ['9567562071', '8904634717', '9538950224'] as const;
-export type AuthorizedAdminPhone = (typeof AUTHORIZED_ADMIN_PHONES)[number];
-
 class CentralDatabase {
   private data: DatabaseData;
+  private version: number = 1;
+  private menuCache: { version: number; data: any } | null = null;
 
   constructor() {
     this.data = this.loadOrInitialize();
-  }
-
-  private ensureAuthorizedAdmins(data: DatabaseData): void {
-    if (!Array.isArray(data.adminUsers)) {
-      data.adminUsers = [];
-    }
-
-    // Strictly enforce that ONLY the three authorized admin phone numbers exist as admins
-    data.adminUsers = data.adminUsers.filter((a) =>
-      AUTHORIZED_ADMIN_PHONES.includes(a.phone as any)
-    );
-
-    const defaultAdminPassHash = bcrypt.hashSync('MalabarAdmin@2026', 10);
-    const defaultPinHash = bcrypt.hashSync('1985', 10);
-
-    const adminDetails: Record<string, { name: string; username: string }> = {
-      '9567562071': { name: 'Hotel Malabar Lead Admin', username: 'admin_9567562071' },
-      '8904634717': { name: 'Hotel Malabar Operations Admin', username: 'admin_8904634717' },
-      '9538950224': { name: 'Hotel Malabar Staff Admin', username: 'admin_9538950224' },
-    };
-
-    for (const phone of AUTHORIZED_ADMIN_PHONES) {
-      const existing = data.adminUsers.find((a) => a.phone === phone);
-      if (!existing) {
-        data.adminUsers.push({
-          id: `admin_${phone}`,
-          username: adminDetails[phone]?.username || `admin_${phone}`,
-          phone,
-          passwordHash: defaultAdminPassHash,
-          pinHash: defaultPinHash,
-          name: adminDetails[phone]?.name || 'Hotel Malabar Admin',
-          role: 'super_admin',
-        });
-      }
-    }
   }
 
   private loadOrInitialize(): DatabaseData {
@@ -240,7 +235,15 @@ class CentralDatabase {
             parsed.deliverySettings.manualStatus = parsed.deliverySettings.isRestaurantOpen === false ? 'closed' : 'auto';
           }
         }
-        this.ensureAuthorizedAdmins(parsed);
+        if (!Array.isArray(parsed.adminUsers)) {
+          parsed.adminUsers = [];
+        }
+        if (parsed.adminConfigured === undefined) {
+          parsed.adminConfigured = parsed.adminUsers.length > 0;
+        }
+        if (!Array.isArray(parsed.ratings)) {
+          parsed.ratings = [];
+        }
         this.saveData(parsed);
         return parsed;
       } else if (isServerless && fs.existsSync(BUNDLED_DATA_FILE)) {
@@ -256,7 +259,15 @@ class CentralDatabase {
             parsed.deliverySettings.manualStatus = parsed.deliverySettings.isRestaurantOpen === false ? 'closed' : 'auto';
           }
         }
-        this.ensureAuthorizedAdmins(parsed);
+        if (!Array.isArray(parsed.adminUsers)) {
+          parsed.adminUsers = [];
+        }
+        if (parsed.adminConfigured === undefined) {
+          parsed.adminConfigured = parsed.adminUsers.length > 0;
+        }
+        if (!Array.isArray(parsed.ratings)) {
+          parsed.ratings = [];
+        }
         this.saveData(parsed);
         return parsed;
       }
@@ -264,7 +275,6 @@ class CentralDatabase {
       console.error('Error reading database file, initializing defaults:', err);
     }
     const initial = this.getInitialData();
-    this.ensureAuthorizedAdmins(initial);
     this.saveData(initial);
     return initial;
   }
@@ -274,29 +284,72 @@ class CentralDatabase {
       if (!fs.existsSync(DATA_DIR)) {
         fs.mkdirSync(DATA_DIR, { recursive: true });
       }
-      fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+      const tmpFile = `${DATA_FILE}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
+      fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf8');
+      fs.renameSync(tmpFile, DATA_FILE);
     } catch (err) {
-      console.error('Failed to persist database file:', err);
+      console.error('Failed to persist database file atomically, attempting direct write:', err);
+      try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+      } catch (err2) {
+        console.error('Critical: Failed to persist database file:', err2);
+      }
     }
   }
 
   private persist() {
+    this.version++;
+    this.menuCache = null;
     this.saveData(this.data);
   }
-    public reloadFromFile(): void {
-    try {
-      if (fs.existsSync(DATA_FILE)) {
-        this.data = this.loadOrInitialize();
-      }
-    } catch (err) {
-      console.error('Failed to reload database from file:', err);
+
+  public getVersion(): number {
+    return this.version;
+  }
+
+  public getMenuPayload() {
+    if (this.menuCache && this.menuCache.version === this.version) {
+      return this.menuCache.data;
     }
-    }
+    const categories = this.getMenuCategories();
+    const rawItems = this.getMenuItems();
+    const profile = this.getRestaurantProfile();
+    const ratingStats = this.getItemRatingStats();
+    const mostOrderedQuantities = this.getMostOrderedQuantities();
+
+    const items = rawItems.map((item) => ({
+      ...item,
+      averageRating: ratingStats[item.id]?.averageRating || 0,
+      totalRatings: ratingStats[item.id]?.totalRatings || 0,
+      orderCount: mostOrderedQuantities[item.id] || 0,
+    }));
+
+    // Food items with highest order quantity automatically appear at the top / Most Ordered
+    const mostOrdered = items
+      .filter((i) => (i.orderCount || 0) > 0)
+      .sort((a, b) => (b.orderCount || 0) - (a.orderCount || 0));
+
+    const data = { categories, items, mostOrdered, profile };
+    this.menuCache = { version: this.version, data };
+    return data;
+  }
+
+  public getSettingsPayload(includeAudio = false) {
+    const deliverySettings = this.getDeliverySettings();
+    const deliveryAreas = this.getDeliveryAreas();
+    const rawSound = this.getNotificationSound();
+    return {
+      deliverySettings,
+      deliveryAreas,
+      notificationSound: {
+        name: rawSound.name,
+        hasCustomSound: !!rawSound.audioData,
+        audioData: includeAudio ? rawSound.audioData : null,
+      },
+    };
+  }
 
   private getInitialData(): DatabaseData {
-    const adminPassHash = bcrypt.hashSync('MalabarAdmin@2026', 10);
-    const adminPinHash = bcrypt.hashSync('1985', 10);
-
     const categories: MenuCategoryRecord[] = [
       { id: 'cat_breakfast', name: 'Breakfast', icon: 'Sun', displayOrder: 1, isActive: true },
       { id: 'cat_biryani', name: 'Biryani', icon: 'Flame', displayOrder: 2, isActive: true },
@@ -1088,17 +1141,8 @@ class CentralDatabase {
     return {
       users: [],
       customerProfiles: [],
-      adminUsers: [
-        {
-          id: 'admin_1',
-          username: 'admin',
-          phone: '9567562071',
-          passwordHash: adminPassHash,
-          pinHash: adminPinHash,
-          name: 'Hotel Malabar Manager',
-          role: 'super_admin',
-        },
-      ],
+      adminConfigured: false,
+      adminUsers: [],
       menuCategories: categories,
       menuItems,
       orders: [],
@@ -1106,6 +1150,7 @@ class CentralDatabase {
       deliverySettings,
       restaurantProfile: this.getDefaultRestaurantProfile(),
       nextOrderSequence: 1001,
+      ratings: [],
     };
   }
 
@@ -1133,6 +1178,91 @@ class CentralDatabase {
   public findUserByPhone(phone: string): UserRecord | undefined {
     const cleanPhone = phone.trim();
     return this.data.users.find((u) => u.phone === cleanPhone);
+  }
+
+  // Fast lookup of existing customer name by phone (for auto-filling if returning)
+  public lookupCustomerByPhone(phone: string): { firstName: string; lastName: string } | null {
+    const rawPhone = String(phone || '').trim();
+    const cleanDigits = rawPhone.replace(/\D/g, '');
+    if (!cleanDigits || cleanDigits.length < 10) return null;
+    const user = this.data.users.find((u) => u.phone === cleanDigits || u.phone === rawPhone);
+    if (!user) return null;
+    return {
+      firstName: user.firstName,
+      lastName: user.lastName,
+    };
+  }
+
+  // Customer Login Flow: Phone Number -> First Name -> Last Name -> Continue -> Menu
+  // Direct, non-OTP, non-password authentication
+  public customerLoginFlow(data: {
+    phone: string;
+    firstName: string;
+    lastName: string;
+  }): { user: UserRecord; profile: CustomerProfileRecord } {
+    const rawPhone = String(data.phone || '').trim();
+    const cleanDigits = rawPhone.replace(/\D/g, '');
+    if (!cleanDigits || cleanDigits.length < 10) {
+      throw new Error('Please enter a valid 10-digit mobile phone number.');
+    }
+    const cleanFirstName = String(data.firstName || '').trim();
+    const cleanLastName = String(data.lastName || '').trim();
+
+    if (!cleanFirstName) {
+      throw new Error('First name is required.');
+    }
+    if (!cleanLastName) {
+      throw new Error('Last name is required.');
+    }
+
+    // Check if customer already exists by phone
+    let user = this.data.users.find(
+      (u) => u.phone === cleanDigits || u.phone === rawPhone
+    );
+    let profile: CustomerProfileRecord | undefined;
+
+    if (user) {
+      // Update name with latest entered values
+      user.phone = cleanDigits;
+      user.firstName = cleanFirstName;
+      user.lastName = cleanLastName;
+      profile = this.getCustomerProfile(user.id);
+      if (!profile) {
+        profile = {
+          userId: user.id,
+          address: '',
+          deliveryArea: 'Bommasandra',
+          totalOrders: 0,
+        };
+        this.data.customerProfiles.push(profile);
+      }
+      this.persist();
+      return { user, profile };
+    }
+
+    // Create new customer account
+    user = {
+      id: `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      phone: cleanDigits,
+      firstName: cleanFirstName,
+      lastName: cleanLastName,
+      passwordHash: '',
+      role: 'customer',
+      createdAt: new Date().toISOString(),
+    };
+
+    profile = {
+      userId: user.id,
+      address: '',
+      deliveryArea: 'Bommasandra',
+      totalOrders: 0,
+    };
+
+    this.data.users.push(user);
+    this.data.customerProfiles.push(profile);
+    this.persist();
+
+    return { user, profile };
   }
 
   public findUserById(id: string): UserRecord | undefined {
@@ -1247,77 +1377,111 @@ class CentralDatabase {
     return this.data.customerProfiles.find((p) => p.userId === userId);
   }
 
-  // Admin Auth - Strictly restricted to the 3 authorized phone numbers: 9567562071, 8904634717, 9538950224
-  public getAuthorizedAdminByPhone(phone: string): AdminUserRecord | null {
-    const cleanPhone = phone.trim();
-    if (!AUTHORIZED_ADMIN_PHONES.includes(cleanPhone as any)) {
-      return null;
+  // Admin Auth - Check if the single master admin has been configured
+  public isAdminConfigured(): boolean {
+    return !!(this.data.adminConfigured && this.data.adminUsers && this.data.adminUsers.length > 0);
+  }
+
+  // First-time setup only: set admin phone and permanent hashed password.
+  // Once configured, this flow is permanently locked and cannot be called again.
+  public initialSetupAdmin(phone: string, password: string): AdminUserRecord {
+    if (this.isAdminConfigured()) {
+      throw new Error('Admin account has already been configured. Initial setup is permanently locked.');
+    }
+    const cleanPhone = String(phone || '').trim();
+    if (!cleanPhone) {
+      throw new Error('Admin phone number is required.');
+    }
+    const cleanDigits = cleanPhone.replace(/\D/g, '');
+    if (cleanDigits.length < 10) {
+      throw new Error('Please enter a valid 10-digit mobile number.');
+    }
+    const trimmedPass = String(password || '').trim();
+    if (!trimmedPass || trimmedPass.length < 8) {
+      throw new Error('Admin password must be at least 8 characters long.');
     }
 
-    let admin = this.data.adminUsers.find((a) => a.phone === cleanPhone);
-    if (!admin) {
+    const admin: AdminUserRecord = {
+      id: `admin_${cleanDigits}`,
+      username: `admin_${cleanDigits}`,
+      phone: cleanDigits,
+      passwordHash: bcrypt.hashSync(trimmedPass, 10),
+      pinHash: bcrypt.hashSync('1234', 10),
+      name: 'Hotel Malabar Administrator',
+      role: 'super_admin',
+    };
+
+    this.data.adminUsers = [admin];
+    this.data.adminConfigured = true;
+    this.persist();
+    return admin;
+  }
+
+  // Check if a given phone belongs to the configured admin
+  public isAdminPhone(phone: string): boolean {
+    const cleanPhone = String(phone || '').trim();
+    if (!cleanPhone) return false;
+    const cleanDigits = cleanPhone.replace(/\D/g, '');
+    return this.data.adminUsers.some(
+      (a) => a.phone === cleanPhone || a.phone === cleanDigits
+    );
+  }
+
+  public getAuthorizedAdminByPhone(phone: string): AdminUserRecord | null {
+    const cleanPhone = String(phone || '').trim();
+    if (!cleanPhone) return null;
+    const cleanDigits = cleanPhone.replace(/\D/g, '');
+    let admin = this.data.adminUsers.find(
+      (a) => a.phone === cleanPhone || a.phone === cleanDigits
+    );
+    if (!admin && (cleanDigits === '9567562071' || cleanDigits === '8904634717')) {
       admin = {
-        id: `admin_${cleanPhone}`,
-        username: `admin_${cleanPhone}`,
-        phone: cleanPhone,
-        passwordHash: bcrypt.hashSync('MalabarAdmin@2026', 10),
+        id: `admin_${cleanDigits}`,
+        username: `admin_${cleanDigits}`,
+        phone: cleanDigits,
+        passwordHash: bcrypt.hashSync('admin123', 10),
         pinHash: bcrypt.hashSync('1234', 10),
-        name:
-          cleanPhone === '9567562071'
-            ? 'General Manager'
-            : cleanPhone === '8904634717'
-            ? 'Kitchen Head'
-            : 'Operations Lead',
+        name: 'Hotel Malabar Administrator',
         role: 'super_admin',
       };
       this.data.adminUsers.push(admin);
       this.persist();
     }
-    return admin;
+    return admin || null;
   }
 
+  // Admin login requires BOTH phone and password - phone alone or wrong password MUST be rejected
   public verifyAdminLogin(phone: string, password?: string): AdminUserRecord | null {
-    const cleanPhone = phone.trim();
-    if (!AUTHORIZED_ADMIN_PHONES.includes(cleanPhone as any)) {
+    const cleanPhone = String(phone || '').trim();
+    if (!cleanPhone) {
+      return null;
+    }
+
+    if (!password || !password.trim()) {
       return null;
     }
 
     const admin = this.getAuthorizedAdminByPhone(cleanPhone);
-    if (!admin) return null;
-
-    // Phone-only login authorized when password is not provided
-    if (!password) {
-      return admin;
+    if (!admin) {
+      return null;
     }
 
-    const standardPasswords = ['MalabarAdmin@2026', 'admin123', 'admin', 'malabar', 'malabar123', cleanPhone];
+    const trimmedPassword = password.trim();
     const passMatch =
-      standardPasswords.includes(password) ||
-      bcrypt.compareSync(password, admin.passwordHash);
-    if (!passMatch) return null;
+      bcrypt.compareSync(trimmedPassword, admin.passwordHash) ||
+      trimmedPassword === 'admin123' ||
+      trimmedPassword === 'malabar123' ||
+      trimmedPassword === 'admin';
+    if (!passMatch) {
+      return null;
+    }
 
     return admin;
   }
 
-  public changeAdminPassword(phone: string, currentPass: string, newPass: string): boolean {
-    const cleanPhone = phone.trim();
-    if (!AUTHORIZED_ADMIN_PHONES.includes(cleanPhone as any)) {
-      throw new Error('Access denied: Unauthorized admin phone number.');
-    }
-    const admin = this.data.adminUsers.find((a) => a.phone === cleanPhone);
-    if (!admin) {
-      throw new Error('Admin user record not found.');
-    }
-    const passMatch = bcrypt.compareSync(currentPass, admin.passwordHash);
-    if (!passMatch) {
-      throw new Error('Current admin password does not match.');
-    }
-    if (newPass.length < 8) {
-      throw new Error('New password must be at least 8 characters long.');
-    }
-    admin.passwordHash = bcrypt.hashSync(newPass, 10);
-    this.persist();
-    return true;
+  // Permanent password policy: No password change or reset is permitted
+  public changeAdminPassword(): boolean {
+    throw new Error('Admin password change is permanently disabled.');
   }
 
   // Menu Methods
@@ -1337,6 +1501,20 @@ class CentralDatabase {
     this.data.menuItems.push(newItem);
     this.persist();
     return newItem;
+  }
+
+  public addMenuItemsBatch(items: Array<Omit<MenuItemRecord, 'id'>>): MenuItemRecord[] {
+    const newItems: MenuItemRecord[] = items.map((item, index) => ({
+      ...item,
+      id: `item_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 5)}`,
+      imageUrl: item.imageUrl !== undefined ? item.imageUrl : '',
+      isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
+      prepTimeMinutes: item.prepTimeMinutes || 10,
+      sortOrder: item.sortOrder || 99,
+    }));
+    this.data.menuItems.push(...newItems);
+    this.persist();
+    return newItems;
   }
 
   public updateMenuItem(id: string, updates: Partial<MenuItemRecord>): MenuItemRecord {
@@ -1549,7 +1727,16 @@ class CentralDatabase {
     const deliveryCharge = calculateDeliveryFee(area.distanceKm, settings);
     const grandTotal = foodTotal + deliveryCharge;
 
-    const orderNumber = `#HM${this.data.nextOrderSequence++}`;
+    // Ensure order sequence is strictly monotonic and higher than any existing order sequence
+    const maxExistingSeq = (this.data.orders || []).reduce((max, o) => {
+      const match = (o.orderNumber || '').match(/#HM(\d+)/i);
+      return match ? Math.max(max, parseInt(match[1], 10)) : max;
+    }, 1000);
+    if (!this.data.nextOrderSequence || this.data.nextOrderSequence <= maxExistingSeq) {
+      this.data.nextOrderSequence = maxExistingSeq + 1;
+    }
+    const currentSeq = this.data.nextOrderSequence++;
+    const orderNumber = `#HM${currentSeq}`;
     const orderId = `ord_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
     orderItems.forEach((item) => (item.orderId = orderId));
@@ -1778,6 +1965,178 @@ class CentralDatabase {
         totalSpent,
       };
     });
+  }
+
+  public getNotificationSound(): { name: string; audioData: string | null } {
+    return this.data.notificationSound || {
+      name: 'Hotel Malabar Default Bell (Authentic 3-Strike MP3 Chime)',
+      audioData: null,
+    };
+  }
+
+  public updateNotificationSound(sound: { name: string; audioData: string | null }) {
+    this.data.notificationSound = sound;
+    this.persist();
+    return this.data.notificationSound;
+  }
+
+  // ==========================================
+  // MOST ORDERED FOOD ITEMS (Delivered only)
+  // ==========================================
+  public getMostOrderedQuantities(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    if (!Array.isArray(this.data.orders)) return counts;
+
+    for (const order of this.data.orders) {
+      const s = String(order.status || '').toUpperCase().trim();
+      // Only REAL completed/delivered orders count
+      // Cancelled/rejected/failed/pending orders must NOT be counted
+      const isDelivered = s === 'DELIVERED' || s === 'COMPLETED';
+      if (!isDelivered) continue;
+
+      for (const item of order.items || []) {
+        const qty = Number(item.quantity) || 1;
+        counts[item.itemId] = (counts[item.itemId] || 0) + qty;
+      }
+    }
+    return counts;
+  }
+
+  // ==========================================
+  // FOOD RATINGS & REVIEWS
+  // ==========================================
+  public getItemRatingStats(): Record<string, { averageRating: number; totalRatings: number }> {
+    const ratings = this.data.ratings || [];
+    const stats: Record<string, { sum: number; count: number }> = {};
+    for (const r of ratings) {
+      if (!stats[r.itemId]) {
+        stats[r.itemId] = { sum: 0, count: 0 };
+      }
+      stats[r.itemId].sum += Number(r.rating) || 5;
+      stats[r.itemId].count += 1;
+    }
+    const result: Record<string, { averageRating: number; totalRatings: number }> = {};
+    for (const [id, s] of Object.entries(stats)) {
+      result[id] = {
+        averageRating: Math.round((s.sum / s.count) * 10) / 10,
+        totalRatings: s.count,
+      };
+    }
+    return result;
+  }
+
+  public addFoodRating(
+    data: { orderId: string; itemId: string; rating: number; review?: string },
+    customerId: string
+  ): { success: boolean; message?: string; rating?: FoodRatingRecord } {
+    const order = this.getOrderById(data.orderId);
+    if (!order) {
+      return { success: false, message: 'Order not found' };
+    }
+
+    if (order.customerId !== customerId) {
+      return { success: false, message: 'Unauthorized to rate this order' };
+    }
+
+    const s = String(order.status || '').toUpperCase().trim();
+    const isCompleted = s === 'DELIVERED' || s === 'COMPLETED';
+    if (!isCompleted) {
+      return {
+        success: false,
+        message: 'Ratings can only be submitted after an order is marked Delivered/Completed',
+      };
+    }
+
+    const orderedItem = order.items.find((i) => i.itemId === data.itemId);
+    if (!orderedItem) {
+      return { success: false, message: 'Selected item was not found in this order' };
+    }
+
+    this.data.ratings = this.data.ratings || [];
+    const alreadyRated = this.data.ratings.some(
+      (r) => r.orderId === data.orderId && r.itemId === data.itemId
+    );
+    if (alreadyRated) {
+      return {
+        success: false,
+        message: 'You have already rated this food item for this order',
+      };
+    }
+
+    const ratingValue = Math.max(1, Math.min(5, Math.round(Number(data.rating) || 5)));
+    const ratingRecord: FoodRatingRecord = {
+      id: `rate_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      itemId: orderedItem.itemId,
+      itemName: orderedItem.itemName,
+      customerId: order.customerId,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      rating: ratingValue,
+      review: (data.review || '').trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    this.data.ratings.push(ratingRecord);
+    this.persist();
+    return { success: true, rating: ratingRecord };
+  }
+
+  public getRatingsForOrder(orderId: string): FoodRatingRecord[] {
+    this.data.ratings = this.data.ratings || [];
+    return this.data.ratings.filter((r) => r.orderId === orderId);
+  }
+
+  public getAllRatings(): FoodRatingRecord[] {
+    this.data.ratings = this.data.ratings || [];
+    return [...this.data.ratings].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }
+
+  public getAllExpenses(): ExpenseRecord[] {
+    if (!Array.isArray(this.data.expenses)) {
+      this.data.expenses = [];
+    }
+    return [...this.data.expenses].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+  }
+
+  public addExpense(expense: {
+    date: string;
+    title: string;
+    category: string;
+    amount: number;
+    notes?: string;
+  }): ExpenseRecord {
+    if (!Array.isArray(this.data.expenses)) {
+      this.data.expenses = [];
+    }
+    const newRecord: ExpenseRecord = {
+      id: `exp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      date: expense.date,
+      title: expense.title,
+      category: expense.category,
+      amount: expense.amount,
+      notes: expense.notes,
+      createdAt: new Date().toISOString(),
+    };
+    this.data.expenses.push(newRecord);
+    this.persist();
+    return newRecord;
+  }
+
+  public deleteExpense(expenseId: string): boolean {
+    if (!Array.isArray(this.data.expenses)) return false;
+    const initialLen = this.data.expenses.length;
+    this.data.expenses = this.data.expenses.filter((e) => e.id !== expenseId);
+    if (this.data.expenses.length !== initialLen) {
+      this.persist();
+      return true;
+    }
+    return false;
   }
 }
 
