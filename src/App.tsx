@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { CustomerFirstScreen } from './components/CustomerFirstScreen';
 import { CustomerAuthModal } from './components/CustomerAuthModal';
 import { CustomerHeader } from './components/CustomerHeader';
@@ -45,14 +45,17 @@ export default function App() {
     );
   };
 
-  const [viewMode, setViewMode] = useState<'customer' | 'admin'>(() => {
-    return isAdminPath() ? 'admin' : 'customer';
-  });
+  const [viewMode, setViewMode] = useState<'customer' | 'admin'>('admin');
 
   // Listen for browser navigation changes and shortcut keys
   useEffect(() => {
     const handleLocationChange = () => {
-      setViewMode(isAdminPath() ? 'admin' : 'customer');
+      // Default to admin panel unless user explicitly navigates to /customer
+      const isCustomerExplicit =
+        window.location.pathname === '/customer' ||
+        window.location.hash === '#customer' ||
+        window.location.search.includes('view=customer');
+      setViewMode(isCustomerExplicit ? 'customer' : 'admin');
     };
 
     const originalPushState = window.history.pushState;
@@ -74,7 +77,7 @@ export default function App() {
       // Hotkey for Hotel Malabar Management: Alt + Shift + A (or Ctrl + Shift + A)
       if ((e.altKey || e.ctrlKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
         e.preventDefault();
-        window.history.pushState({}, '', '/admin/login');
+        window.history.pushState({}, '', '/admin');
       }
     };
 
@@ -93,13 +96,16 @@ export default function App() {
 
   const navigateToCustomer = () => {
     if (typeof window !== 'undefined') {
-      if (window.location.pathname.startsWith('/admin')) {
-        window.history.pushState({}, '', '/');
-      } else if (window.location.hash.includes('admin')) {
-        window.location.hash = '';
-      }
+      window.history.pushState({}, '', '/');
     }
     setViewMode('customer');
+  };
+
+  const navigateToAdmin = () => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/admin');
+    }
+    setViewMode('admin');
   };
 
   // Customer authentication state
@@ -111,6 +117,7 @@ export default function App() {
   // Menu & Settings
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [mostOrderedItems, setMostOrderedItems] = useState<MenuItem[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>({
@@ -162,12 +169,8 @@ export default function App() {
     };
   }, []);
 
-  // 2. Load menu and delivery settings
-  useEffect(() => {
-    fetchMenuAndSettings();
-  }, []);
-
-  const fetchMenuAndSettings = async () => {
+  // 2. Load menu and delivery settings with smart equality checks and visibility listening
+  const fetchMenuAndSettings = useCallback(async () => {
     try {
       const [menuRes, settingsRes] = await Promise.all([
         fetch('/api/menu'),
@@ -176,25 +179,150 @@ export default function App() {
 
       if (menuRes.ok) {
         const mData = await menuRes.json();
-        setCategories(mData.categories || []);
-        setMenuItems(mData.items || []);
+        const incomingCategories: MenuCategory[] = mData.categories || [];
+        const incomingItems: MenuItem[] = mData.items || [];
+        const incomingMostOrdered: MenuItem[] = mData.mostOrdered || [];
+
+        setCategories((prev) => {
+          if (
+            prev.length === incomingCategories.length &&
+            prev.every(
+              (c, i) =>
+                c.id === incomingCategories[i]?.id &&
+                c.name === incomingCategories[i]?.name &&
+                c.isActive === incomingCategories[i]?.isActive
+            )
+          ) {
+            return prev;
+          }
+          return incomingCategories;
+        });
+
+        setMenuItems((prev) => {
+          if (
+            prev.length === incomingItems.length &&
+            prev.every(
+              (it, i) =>
+                it.id === incomingItems[i]?.id &&
+                it.isAvailable === incomingItems[i]?.isAvailable &&
+                it.price === incomingItems[i]?.price &&
+                it.name === incomingItems[i]?.name &&
+                it.imageUrl === incomingItems[i]?.imageUrl &&
+                it.categoryId === incomingItems[i]?.categoryId &&
+                it.averageRating === incomingItems[i]?.averageRating &&
+                it.totalRatings === incomingItems[i]?.totalRatings &&
+                it.orderCount === incomingItems[i]?.orderCount
+            )
+          ) {
+            return prev;
+          }
+          return incomingItems;
+        });
+
+        setMostOrderedItems(incomingMostOrdered);
       }
+
       if (settingsRes.ok) {
         const sData = await settingsRes.json();
-        setDeliverySettings(sData.deliverySettings);
-        setDeliveryAreas(sData.deliveryAreas || []);
+        setDeliverySettings((prev) => {
+          if (
+            prev &&
+            sData.deliverySettings &&
+            prev.isRestaurantOpen === sData.deliverySettings.isRestaurantOpen &&
+            prev.freeDeliveryThresholdKm === sData.deliverySettings.freeDeliveryThresholdKm &&
+            prev.chargePerExtraKm === sData.deliverySettings.chargePerExtraKm &&
+            prev.maxDeliveryRadiusKm === sData.deliverySettings.maxDeliveryRadiusKm
+          ) {
+            return prev;
+          }
+          return sData.deliverySettings;
+        });
+
+        setDeliveryAreas((prev) => {
+          const incomingAreas = sData.deliveryAreas || [];
+          if (
+            prev.length === incomingAreas.length &&
+            prev.every(
+              (a, i) =>
+                a.id === incomingAreas[i]?.id &&
+                a.isActive === incomingAreas[i]?.isActive &&
+                a.distanceKm === incomingAreas[i]?.distanceKm
+            )
+          ) {
+            return prev;
+          }
+          return incomingAreas;
+        });
       }
     } catch (err) {
       console.warn('Notice: Server initializing or network reconnecting:', err);
     }
-  };
+  }, []);
 
-  // 3. Poll customer orders when logged in
+  useEffect(() => {
+    fetchMenuAndSettings();
+    // Periodically sync menu availability for customers (runs only when tab is visible)
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        fetchMenuAndSettings();
+      }
+    }, 8000);
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        fetchMenuAndSettings();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [fetchMenuAndSettings]);
+
+  // Listen for ratings submitted by customers to immediately refresh menu ratings and most ordered
+  useEffect(() => {
+    const handleRatingSubmitted = () => {
+      fetchMenuAndSettings();
+    };
+    window.addEventListener('hm_rating_submitted', handleRatingSubmitted);
+    return () => {
+      window.removeEventListener('hm_rating_submitted', handleRatingSubmitted);
+    };
+  }, [fetchMenuAndSettings]);
+
+  // Sync cart item availability status whenever fresh menu items are fetched
+  useEffect(() => {
+    if (menuItems.length > 0) {
+      setCartItems((prev) => {
+        let hasChanges = false;
+        const updated = prev.map((ci) => {
+          const fresh = menuItems.find((m) => m.id === ci.menuItem.id);
+          if (!fresh) return ci;
+          if (
+            fresh.isAvailable !== ci.menuItem.isAvailable ||
+            fresh.price !== ci.menuItem.price ||
+            fresh.name !== ci.menuItem.name ||
+            fresh.imageUrl !== ci.menuItem.imageUrl
+          ) {
+            hasChanges = true;
+            return { ...ci, menuItem: fresh };
+          }
+          return ci;
+        });
+        return hasChanges ? updated : prev;
+      });
+    }
+  }, [menuItems]);
+
+  // 3. Poll customer orders when logged in (with visibility pause & shallow diffing)
   useEffect(() => {
     if (!customerUser) return;
 
     let isMounted = true;
     const fetchCustomerOrders = async () => {
+      if (document.hidden) return;
       const token = localStorage.getItem('hm_customer_token');
       if (!token) return;
       try {
@@ -203,9 +331,24 @@ export default function App() {
         });
         if (!isMounted) return;
         if (res.ok) {
-          const data = await res.json();
+          const data: Order[] = await res.json();
           if (isMounted) {
-            setCustomerOrders(data);
+            setCustomerOrders((prev) => {
+              if (
+                prev.length === data.length &&
+                prev.every(
+                  (o, idx) =>
+                    o.id === data[idx]?.id &&
+                    o.status === data[idx]?.status &&
+                    o.estimatedReadyAt === data[idx]?.estimatedReadyAt &&
+                    o.preparationMinutes === data[idx]?.preparationMinutes &&
+                    o.updatedAt === data[idx]?.updatedAt
+                )
+              ) {
+                return prev;
+              }
+              return data;
+            });
           }
         } else if (res.status === 401) {
           // Token expired or invalid
@@ -223,30 +366,43 @@ export default function App() {
 
     fetchCustomerOrders();
     const interval = setInterval(fetchCustomerOrders, 6000);
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        fetchCustomerOrders();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       isMounted = false;
       clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [customerUser]);
 
   // Handle Auth Success
-  const handleAuthSuccess = (token: string, user: User) => {
+  const handleAuthSuccess = useCallback((token: string, user: User) => {
     localStorage.setItem('hm_customer_token', token);
     setCustomerUser(user);
     setAuthModalOpen(false);
     fetchMenuAndSettings();
-  };
+  }, [fetchMenuAndSettings]);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem('hm_customer_token');
     setCustomerUser(null);
     setCustomerProfile(undefined);
     setCartItems([]);
     setActiveTrackingOrderId(null);
-  };
+  }, []);
 
   // Cart operations
-  const handleAddToCart = (item: MenuItem) => {
+  const handleAddToCart = useCallback((item: MenuItem) => {
+    // Strictly prevent adding out of stock items
+    if (!item.isAvailable) {
+      return;
+    }
     setCartItems((prev) => {
       const existing = prev.find((ci) => ci.menuItem.id === item.id);
       if (existing) {
@@ -256,10 +412,16 @@ export default function App() {
       }
       return [...prev, { menuItem: item, quantity: 1 }];
     });
-  };
+  }, []);
 
-  const handleUpdateCartQuantity = (itemId: string, delta: number) => {
+  const handleUpdateCartQuantity = useCallback((itemId: string, delta: number) => {
     setCartItems((prev) => {
+      const itemToUpdate = prev.find((ci) => ci.menuItem.id === itemId);
+      if (!itemToUpdate) return prev;
+      // Strictly prevent increasing quantity of an out-of-stock item
+      if (delta > 0 && !itemToUpdate.menuItem.isAvailable) {
+        return prev;
+      }
       return prev
         .map((ci) => {
           if (ci.menuItem.id === itemId) {
@@ -270,50 +432,79 @@ export default function App() {
         })
         .filter(Boolean) as CartItem[];
     });
-  };
+  }, []);
 
-  const handleRemoveCartItem = (itemId: string) => {
+  const handleRemoveCartItem = useCallback((itemId: string) => {
     setCartItems((prev) => prev.filter((ci) => ci.menuItem.id !== itemId));
-  };
+  }, []);
 
-  const handleClearCart = () => {
+  const handleClearCart = useCallback(() => {
     setCartItems([]);
-  };
+  }, []);
 
-  const handleOrderPlaced = (newOrder: Order) => {
+  const handleOrderPlaced = useCallback((newOrder: Order) => {
     setActiveTrackingOrderId(newOrder.id);
     setCustomerOrders((prev) => [newOrder, ...prev]);
-  };
+  }, []);
 
-  // Cart calculations
-  const cartTotalItemsCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  const cartFoodTotal = cartItems.reduce(
-    (sum, item) => sum + item.menuItem.price * item.quantity,
-    0
+  // Cart calculations memoized
+  const cartTotalItemsCount = useMemo(
+    () => cartItems.reduce((sum, item) => sum + item.quantity, 0),
+    [cartItems]
   );
-  const activeOrdersCount = customerOrders.filter((o) =>
-    ['Order Placed', 'Accepted', 'Preparing', 'Ready', 'Out for Delivery'].includes(o.status)
-  ).length;
+  const cartFoodTotal = useMemo(
+    () => cartItems.reduce((sum, item) => sum + item.menuItem.price * item.quantity, 0),
+    [cartItems]
+  );
+  const activeOrdersCount = useMemo(
+    () =>
+      customerOrders.filter((o) =>
+        ['Order Placed', 'Accepted', 'Preparing', 'Ready', 'Out for Delivery'].includes(o.status)
+      ).length,
+    [customerOrders]
+  );
 
-  // Category item counts
-  const categoryCounts: Record<string, number> = {};
-  menuItems.forEach((item) => {
-    categoryCounts[item.categoryId] = (categoryCounts[item.categoryId] || 0) + 1;
-  });
+  // Category item counts memoized
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    menuItems.forEach((item) => {
+      counts[item.categoryId] = (counts[item.categoryId] || 0) + 1;
+    });
+    return counts;
+  }, [menuItems]);
 
-  // Filtered Menu Items
-  const filteredMenuItems = menuItems.filter((item) => {
-    if (selectedCategoryId !== 'all' && item.categoryId !== selectedCategoryId) {
-      return false;
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = item.name.toLowerCase().includes(q);
-      const matchDesc = item.description.toLowerCase().includes(q);
-      return matchName || matchDesc;
-    }
-    return true;
-  });
+  // Filtered Menu Items memoized
+  const filteredMenuItems = useMemo(() => {
+    return menuItems.filter((item) => {
+      if (selectedCategoryId !== 'all' && item.categoryId !== selectedCategoryId) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchName = item.name.toLowerCase().includes(q);
+        const matchDesc = item.description.toLowerCase().includes(q);
+        return matchName || matchDesc;
+      }
+      return true;
+    });
+  }, [menuItems, selectedCategoryId, searchQuery]);
+
+  // Filtered Most Ordered Items memoized (Requirement 2)
+  const filteredMostOrdered = useMemo(() => {
+    if (!mostOrderedItems || mostOrderedItems.length === 0) return [];
+    return mostOrderedItems.filter((item) => {
+      if (selectedCategoryId !== 'all' && item.categoryId !== selectedCategoryId) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchName = item.name.toLowerCase().includes(q);
+        const matchDesc = item.description.toLowerCase().includes(q);
+        return matchName || matchDesc;
+      }
+      return true;
+    });
+  }, [mostOrderedItems, selectedCategoryId, searchQuery]);
 
   // =========================================================================
   // VIEW ROUTING
@@ -338,6 +529,7 @@ export default function App() {
             setAuthInitialMode('login');
             setAuthModalOpen(true);
           }}
+          onOpenAdmin={navigateToAdmin}
         />
 
         <CustomerAuthModal
@@ -440,6 +632,50 @@ export default function App() {
               Track Live →
             </span>
           </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 🔥 MOST ORDERED SECTION (Requirement 2)                                   */}
+        {/* ========================================================================= */}
+        {filteredMostOrdered.length > 0 && (
+          <section id="most-ordered-section" className="mb-10 pb-8 border-b border-[#1b432a]">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+              <div>
+                <h2 className="font-brand text-2xl sm:text-3xl font-bold text-[#fcfaf6] flex items-center gap-2.5">
+                  <span className="text-2xl">🔥</span>
+                  <span>Most Ordered</span>
+                </h2>
+                <p className="text-xs text-[#8ea896] mt-0.5">
+                  Our authentic kitchen specialties ordered most frequently by Hotel Malabar customers.
+                </p>
+              </div>
+
+              <span className="text-xs text-[#dfb64c] bg-[#143d26] border border-[#235836] px-3 py-1.5 rounded-full font-bold">
+                Customer Favorites
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+              {filteredMostOrdered.map((item) => {
+                const cat = categories.find((c) => c.id === item.categoryId);
+                const cartItem = cartItems.find((ci) => ci.menuItem.id === item.id);
+                const qty = cartItem ? cartItem.quantity : 0;
+
+                return (
+                  <FoodCard
+                    key={`most-ordered-${item.id}`}
+                    item={item}
+                    categoryName={cat?.name}
+                    cartQuantity={qty}
+                    isRestaurantOpen={deliverySettings.isRestaurantOpen}
+                    isCategoryOpen={cat?.isActive !== false}
+                    onAddToCart={handleAddToCart}
+                    onUpdateQuantity={handleUpdateCartQuantity}
+                  />
+                );
+              })}
+            </div>
+          </section>
         )}
 
         {/* Section Heading */}
@@ -562,6 +798,14 @@ export default function App() {
             <span>Hotlines: 9567562071 / 8904634717</span>
             <span>•</span>
             <span>100% Cash on Delivery</span>
+            <span>•</span>
+            <button
+              id="customer-footer-admin-btn"
+              onClick={navigateToAdmin}
+              className="text-[#648871] hover:text-[#dfb64c] transition-colors underline underline-offset-2 cursor-pointer"
+            >
+              Admin Portal
+            </button>
           </div>
         </div>
       </footer>

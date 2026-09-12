@@ -35,6 +35,23 @@ export interface MenuItem {
   isAvailable: boolean;
   prepTimeMinutes: number;
   sortOrder: number;
+  averageRating?: number;
+  totalRatings?: number;
+  orderCount?: number;
+}
+
+export interface FoodRating {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  itemId: string;
+  itemName: string;
+  customerId: string;
+  customerName: string;
+  customerPhone?: string;
+  rating: number; // 1 to 5
+  review?: string;
+  createdAt: string;
 }
 
 export interface CartItem {
@@ -82,7 +99,8 @@ export interface Order {
   foodTotal: number;
   deliveryCharge: number;
   grandTotal: number;
-  paymentMethod: 'Cash on Delivery';
+  paymentMethod: string;
+  paymentStatus?: 'pending' | 'completed' | 'failed';
   status: OrderStatus;
   estimatedPrepTimeMinutes: number;
   preparationMinutes?: number;
@@ -99,6 +117,16 @@ export interface Order {
   googleMapsUrl?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DailyExpense {
+  id: string;
+  date: string; // YYYY-MM-DD
+  title: string;
+  category: string;
+  amount: number;
+  notes?: string;
+  createdAt: string;
 }
 
 export interface DeliveryArea {
