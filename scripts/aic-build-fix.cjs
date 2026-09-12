@@ -46,6 +46,35 @@ if (/performAutoAdminLogin|9567562071|admin123/.test(admin)) {
 }
 fs.writeFileSync(adminFile, admin, 'utf8');
 
+// Keep customer and admin as two separate URL entry points.
+// Root (/) is ALWAYS customer; only /admin* enters the admin application.
+const appFile = 'src/App.tsx';
+let app = fs.readFileSync(appFile, 'utf8');
+app = app.replace(
+  "const [viewMode, setViewMode] = useState<'customer' | 'admin'>('admin');",
+  "const [viewMode, setViewMode] = useState<'customer' | 'admin'>(isAdminPath() ? 'admin' : 'customer');"
+);
+app = app.replace(
+  /const handleLocationChange = \(\) => \{\s*\/\/ Default to admin panel unless user explicitly navigates to \/customer\s*const isCustomerExplicit = \s*window\.location\.pathname === '\/customer' \|\|\s*window\.location\.hash === '#customer' \|\|\s*window\.location\.search\.includes\('view=customer'\);\s*setViewMode\(isCustomerExplicit \? 'customer' : 'admin'\);\s*\};/,
+  "const handleLocationChange = () => {\n      // Strict separation: only the /admin URL family opens Admin.\n      // Every other normal site URL opens the customer website.\n      setViewMode(isAdminPath() ? 'admin' : 'customer');\n    };"
+);
+// Remove the keyboard shortcut that could expose the admin panel from the customer site.
+app = app.replace(
+  /\n\s*const handleKeyDown = \(e: KeyboardEvent\) => \{[\s\S]*?\n\s*\};\n\n\s*window\.addEventListener\('popstate', handleLocationChange\);/,
+  "\n\n    window.addEventListener('popstate', handleLocationChange);"
+);
+// Do not render an Admin Portal entry point on the customer landing screen.
+app = app.replace(/\s*onOpenAdmin=\{navigateToAdmin\}/g, '');
+fs.writeFileSync(appFile, app, 'utf8');
+
+// Also remove the Admin Portal button itself from the customer first screen.
+const firstScreenFile = 'src/components/CustomerFirstScreen.tsx';
+let firstScreen = fs.readFileSync(firstScreenFile, 'utf8');
+firstScreen = firstScreen.replace(/,\s*onOpenAdmin\?: \(\) => void/, '');
+firstScreen = firstScreen.replace(/,\s*onOpenAdmin\s*\}\)\s*=>/, ' }) =>');
+firstScreen = firstScreen.replace(/\n\s*\{onOpenAdmin && \([\s\S]*?\n\s*\)\}/, '');
+fs.writeFileSync(firstScreenFile, firstScreen, 'utf8');
+
 // AIC App Hosting may start dist/server.cjs directly instead of using our wrapper.
 // Patch the actual server build so customer orders are written to Supabase and
 // admin order reads refresh from Supabase before querying the local database.
@@ -77,4 +106,4 @@ replaceOnce(
   "  public reloadFromDisk(): void {\n    try {\n      if (!fs.existsSync(DATA_FILE)) return;\n      const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));\n      if (!parsed || !Array.isArray(parsed.users) || !Array.isArray(parsed.orders)) return;\n      this.data = parsed as DatabaseData;\n      this.menuCache = null;\n      this.version++;\n    } catch (error) {\n      console.error('Failed to reload database from disk:', error);\n    }\n  }\n\n  public getVersion(): number {\n    return this.version;\n  }"
 );
 
-console.log('Hotel Malabar AIC build fixes, Supabase order sync, and admin security guard applied.');
+console.log('Hotel Malabar AIC build fixes, Supabase order sync, admin security guard, and customer/admin separation applied.');
