@@ -1,0 +1,114 @@
+name: One-time Hotel Malabar AIC fix
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[aic-fixed]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply AIC and admin fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('.')
+          p=root/'server.ts'; s=p.read_text()
+          old="import { extractMenuItemsFromPhotos } from './server/gemini.ts';"
+          new=old+"\nimport { syncFromSupabase } from './server/supabase-sync.ts';"
+          assert old in s
+          s=s.replace(old,new,1)
+          old="if (adminPassword.length < 6) {\n      return res.status(400).json({ error: 'Admin password must be at least 6 characters.' });\n    }"
+          new="if (adminPassword.length < 8) {\n      return res.status(400).json({ error: 'Admin password must be at least 8 characters.' });\n    }"
+          assert old in s; s=s.replace(old,new,1)
+          old="const admin = db.setupInitialAdmin({ phone: adminPhone, password: adminPassword });"
+          assert old in s; s=s.replace(old,"const admin = db.initialSetupAdmin(adminPhone, adminPassword);",1)
+          needle="  app.listen(PORT, '0.0.0.0', () => {"
+          insert="""  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+              try {
+                const synced = await syncFromSupabase();
+                if (synced && typeof (db as any).reloadFromFile === 'function') {
+                  (db as any).reloadFromFile();
+                }
+              } catch (error) {
+                console.error('Supabase startup sync failed:', error);
+              }
+            }
+
+"""
+          assert needle in s; s=s.replace(needle,insert+needle,1); p.write_text(s)
+
+          p=root/'server/db.ts'; s=p.read_text()
+          old="import bcrypt from 'bcryptjs';"; assert old in s
+          s=s.replace(old,old+"\nimport { syncToSupabase } from './supabase-sync.ts';",1)
+          needle="""  private persist() {
+    this.version++;
+    this.menuCache = null;
+    this.saveData(this.data);
+  }"""
+          repl="""  private persist() {
+    this.version++;
+    this.menuCache = null;
+    this.saveData(this.data);
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      void syncToSupabase();
+    }
+  }
+
+  public reloadFromFile(): void {
+    try {
+      if (!fs.existsSync(DATA_FILE)) return;
+      const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.users) && Array.isArray(parsed.orders)) {
+        this.data = parsed as DatabaseData;
+        this.menuCache = null;
+      }
+    } catch (err) {
+      console.error('Failed to reload database from file:', err);
+    }
+  }"""
+          assert needle in s; s=s.replace(needle,repl,1); p.write_text(s)
+
+          p=root/'src/components/AdminDashboard.tsx'; s=p.read_text()
+          start=s.index("    const performAutoAdminLogin = () => {")
+          end=s.index("    const savedToken = localStorage.getItem('hm_admin_token');",start)
+          s=s[:start]+s[end:]
+          old="""          } else {
+            localStorage.removeItem('hm_admin_token');
+            performAutoAdminLogin();
+          }
+        })
+        .catch(() => {
+          performAutoAdminLogin();
+        });
+    } else {
+      performAutoAdminLogin();
+    }"""
+          new="""          } else {
+            localStorage.removeItem('hm_admin_token');
+            setAdminToken(null);
+            setIsAdminLoggedIn(false);
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem('hm_admin_token');
+          setAdminToken(null);
+          setIsAdminLoggedIn(false);
+        });
+    }"""
+          assert old in s; s=s.replace(old,new,1)
+          s=s.replace("fetch('/api/admin/setup-status')","fetch('/api/admin/config-status')",1)
+          s=s.replace("const configured = Boolean(data?.isConfigured);","const configured = Boolean(data?.configured);",1)
+          s=s.replace("fetch('/api/admin/status', {","fetch('/api/admin/me', {",1)
+          assert '9567562071' not in s and 'admin123' not in s
+          p.write_text(s)
+          PY
+      - name: Commit fixes and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server.ts server/db.ts src/components/AdminDashboard.tsx .github/workflows/hotel-malabar-aic-fix.yml
+          git commit -m "fix: connect AIC app database to Supabase and secure admin auth [aic-fixed]"
+          git push
