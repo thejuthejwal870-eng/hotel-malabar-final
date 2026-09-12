@@ -24,37 +24,25 @@ replaceOnce(
 // Remove the old hardcoded admin auto-login. Use only the real login flow.
 const adminFile = 'src/components/AdminDashboard.tsx';
 let admin = fs.readFileSync(adminFile, 'utf8');
-
-// The previous patch used an overly strict formatter-dependent removal. This regex
-// removes the entire auto-login function regardless of whitespace/line formatting.
 admin = admin.replace(
   /\n\s*const performAutoAdminLogin = \(\) => \{[\s\S]*?\n\s*\};\s*/,
   '\n\n'
 );
-
-// Remove every remaining invocation of the old automatic login helper.
 admin = admin.replace(/\n\s*performAutoAdminLogin\(\);/g, '');
-
-// If an old fallback branch remains, simply clear the admin token and stay logged out.
 admin = admin.replace(
   /\.catch\(\(\) => \{\s*performAutoAdminLogin\(\);\s*\}\);/g,
   ".catch(() => {\n          localStorage.removeItem('hm_admin_token');\n          setAdminToken(null);\n          setIsAdminLoggedIn(false);\n        });"
 );
-
-// Use the backend's actual admin endpoints.
 admin = admin.replace("fetch('/api/admin/setup-status')", "fetch('/api/admin/config-status')");
 admin = admin.replace("const configured = Boolean(data?.isConfigured);", "const configured = Boolean(data?.configured);");
 admin = admin.replace("fetch('/api/admin/status', {", "fetch('/api/admin/me', {");
-
-// Never allow the old credential literals into the deployed frontend.
 admin = admin.replace(/9567562071/g, 'REMOVED_ADMIN_PHONE');
 admin = admin.replace(/admin123/g, 'REMOVED_ADMIN_PASSWORD');
-
 fs.writeFileSync(adminFile, admin, 'utf8');
 
 // AIC App Hosting may start dist/server.cjs directly instead of using our wrapper.
 // Patch the actual server build so customer orders are written to Supabase and
-// admin order reads refresh from Supabase before querying the local in-memory DB.
+// admin order reads refresh from Supabase before querying the local database.
 replaceOnce(
   'server.ts',
   "import { db } from './server/db.ts';",
@@ -72,8 +60,8 @@ replaceOnce(
 );
 replaceOnce(
   'server.ts',
-  "app.get('/api/admin/orders', requireAdminAuth, (req: Request, res: Response) => {\n  try {\n    const date = req.query.date ? String(req.query.date) : undefined;",
-  "app.get('/api/admin/orders', requireAdminAuth, async (req: Request, res: Response) => {\n  try {\n    await syncFromSupabase();\n    db.reloadFromDisk();\n    const date = req.query.date ? String(req.query.date) : undefined;"
+  "app.get('/api/admin/orders', requireAdminAuth, (req: Request, res: Response) => {\n  try {\n    const date = req.query.date ? String(req.query.date) : undefined;\n    const status = req.query.status ? String(req.query.status) : undefined;\n    res.json(db.getAdminOrders({ date, status }));\n  } catch (err: any) {",
+  "app.get('/api/admin/orders', requireAdminAuth, async (req: Request, res: Response) => {\n  try {\n    // Always refresh the shared database before an admin order read.\n    await syncFromSupabase();\n    db.reloadFromDisk();\n\n    // Return the complete order list. The Admin Dashboard already applies\n    // the New / Accepted / Rejected / History filters on the client.\n    res.json(db.getAllOrders());\n  } catch (err: any) {"
 );
 
 // Add a small database reload hook so an admin process can see orders written by another AIC instance.
