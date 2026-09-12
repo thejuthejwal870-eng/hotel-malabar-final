@@ -99,6 +99,13 @@ replaceOnce(
   "app.get('/api/admin/orders', requireAdminAuth, async (req: Request, res: Response) => {\n  try {\n    // Always refresh the shared database before an admin order read.\n    await syncFromSupabase();\n    db.reloadFromDisk();\n\n    // Return the complete order list. The Admin Dashboard already applies\n    // the New / Accepted / Rejected / History filters on the client.\n    res.json(db.getAllOrders());\n  } catch (err: any) {"
 );
 
+// Make the production SPA shell resilient to stale browser/CDN caching.
+replaceOnce(
+  'server.ts',
+  "app.get('*', (req, res) => {\n      res.sendFile(path.join(distPath, 'index.html'));\n    });",
+  "app.get('*', (req, res) => {\n      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');\n      res.setHeader('Pragma', 'no-cache');\n      res.setHeader('Expires', '0');\n      res.sendFile(path.join(distPath, 'index.html'));\n    });"
+);
+
 // Add a small database reload hook so an admin process can see orders written by another AIC instance.
 replaceOnce(
   'server/db.ts',
@@ -106,4 +113,17 @@ replaceOnce(
   "  public reloadFromDisk(): void {\n    try {\n      if (!fs.existsSync(DATA_FILE)) return;\n      const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));\n      if (!parsed || !Array.isArray(parsed.users) || !Array.isArray(parsed.orders)) return;\n      this.data = parsed as DatabaseData;\n      this.menuCache = null;\n      this.version++;\n    } catch (error) {\n      console.error('Failed to reload database from disk:', error);\n    }\n  }\n\n  public getVersion(): number {\n    return this.version;\n  }"
 );
 
-console.log('Hotel Malabar AIC build fixes, Supabase order sync, admin security guard, and customer/admin separation applied.');
+// Production-build guardrails: fail the build rather than ship a known blank-screen configuration.
+if (!fs.existsSync('src/main.tsx') || !fs.existsSync('src/components/RuntimeErrorBoundary.tsx')) {
+  throw new Error('AIC build guard: runtime-safe React entry files are missing.');
+}
+const mainSource = fs.readFileSync('src/main.tsx', 'utf8');
+if (!mainSource.includes('RuntimeErrorBoundary')) {
+  throw new Error('AIC build guard: RuntimeErrorBoundary is not wired into main.tsx.');
+}
+const appSource = fs.readFileSync('src/App.tsx', 'utf8');
+if (/const \[viewMode, setViewMode\] = useState<'customer' \| 'admin'>\('admin'\)/.test(appSource)) {
+  throw new Error('AIC build guard: customer root still defaults to admin mode.');
+}
+
+console.log('Hotel Malabar AIC build fixes, Supabase order sync, admin security guard, customer/admin separation, and white-screen safeguards applied.');
