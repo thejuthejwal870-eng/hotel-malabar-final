@@ -1,14 +1,16 @@
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import fs from 'fs';
 import jwt from 'jsonwebtoken';
-import { db, AUTHORIZED_ADMIN_PHONES } from './server/db.ts';
+import { db } from './server/db.ts';
+import { extractMenuItemsFromPhotos } from './server/gemini.ts';
 
 export const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'hotel-malabar-secure-secret-key-2026';
 
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+app.use(express.json({ limit: '35mb' }));
+app.use(express.urlencoded({ extended: true, limit: '35mb' }));
 
 // Permissive CORS headers for API requests
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -31,7 +33,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       req.url.startsWith('/menu') ||
       req.url.startsWith('/cart') ||
       req.url.startsWith('/orders') ||
-      req.url.startsWith('/admin') ||
       req.url.startsWith('/health') ||
       req.url.startsWith('/delivery') ||
       req.url.startsWith('/profile'))
@@ -69,7 +70,7 @@ function requireCustomerAuth(req: AuthenticatedRequest, res: Response, next: Nex
   }
 }
 
-// Admin Auth Middleware - strictly verify role is admin AND phone is one of the 3 authorized numbers
+// Admin Auth Middleware - strictly verify role is admin AND phone belongs to an authorized admin account
 function requireAdminAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -82,7 +83,7 @@ function requireAdminAuth(req: AuthenticatedRequest, res: Response, next: NextFu
     if (
       !decoded ||
       decoded.role !== 'admin' ||
-      !AUTHORIZED_ADMIN_PHONES.includes(decoded.phone as any)
+      !db.isAdminPhone(decoded.phone)
     ) {
       return res.status(403).json({
         error: 'Access forbidden. Only authorized Hotel Malabar admin accounts are permitted.',
@@ -103,40 +104,65 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
-// Register
-app.post('/api/auth/register', (req: Request, res: Response) => {
+// Customer Fast Lookup by Phone
+app.get('/api/auth/lookup-customer', (req: Request, res: Response) => {
+  try {
+    const phone = String(req.query.phone || '').trim();
+    if (!phone) {
+      return res.json({ found: false });
+    }
+    const customer = db.lookupCustomerByPhone(phone);
+    if (!customer) {
+      return res.json({ found: false });
+    }
+    return res.json({
+      found: true,
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+    });
+  } catch {
+    return res.json({ found: false });
+  }
+});
+
+// Customer Login: Phone Number -> First Name -> Last Name -> Continue -> Menu
+// No password, no OTP, no privacy PIN required
+app.post(['/api/auth/customer-login', '/api/auth/login', '/api/auth/register'], (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'application/json');
   try {
     const { phone, firstName, lastName, password } = req.body || {};
 
-    if (!phone || !firstName || !lastName || !password) {
+    const rawPhone = String(phone || '').trim();
+    const cleanDigits = rawPhone.replace(/\D/g, '');
+    if (!cleanDigits || cleanDigits.length < 10) {
       return res.status(400).json({
-        error: 'First Name, Last Name, Phone Number, and Password are all required.',
+        error: 'Please enter a valid 10-digit mobile phone number.',
       });
     }
 
-    const cleanPhone = String(phone).trim();
-    const cleanFirstName = String(firstName).trim();
-    const cleanLastName = String(lastName).trim();
-    const cleanPassword = String(password);
+    let resolvedFirstName = String(firstName || '').trim();
+    let resolvedLastName = String(lastName || '').trim();
 
-    if (!cleanPhone || !cleanFirstName || !cleanLastName || !cleanPassword) {
-      return res.status(400).json({
-        error: 'All fields must contain valid non-empty values.',
-      });
+    // If existing user already has names in database and none was supplied
+    if (!resolvedFirstName || !resolvedLastName) {
+      const existing = db.lookupCustomerByPhone(cleanDigits);
+      if (existing) {
+        resolvedFirstName = resolvedFirstName || existing.firstName;
+        resolvedLastName = resolvedLastName || existing.lastName;
+      }
     }
 
-    if (cleanPassword.length < 8) {
-      return res.status(400).json({
-        error: 'Password must be at least 8 characters long.',
-      });
+    if (!resolvedFirstName) {
+      return res.status(400).json({ error: 'First name is required.' });
+    }
+    if (!resolvedLastName) {
+      return res.status(400).json({ error: 'Last name is required.' });
     }
 
-    const { user, profile } = db.registerCustomer({
-      phone: cleanPhone,
-      firstName: cleanFirstName,
-      lastName: cleanLastName,
-      password: cleanPassword,
+    const { user, profile } = db.customerLoginFlow({
+      phone: cleanDigits,
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
     });
 
     const token = jwt.sign(
@@ -154,57 +180,17 @@ app.post('/api/auth/register', (req: Request, res: Response) => {
       createdAt: user.createdAt,
     };
 
-    return res.status(201).json({
-      message: 'Account created successfully. Welcome to Hotel Malabar!',
+    return res.json({
+      message: 'Welcome to Hotel Malabar!',
       token,
       user: safeUser,
       profile,
     });
   } catch (err: any) {
-    console.error('Customer registration error:', err);
+    console.error('Customer login error:', err);
     return res.status(400).json({
-      error: err.message || 'Registration failed. Please try again.',
+      error: err.message || 'Login failed. Please try again.',
     });
-  }
-});
-
-// Login
-app.post('/api/auth/login', (req: Request, res: Response) => {
-  try {
-    const { phone, password } = req.body;
-    if (!phone || !password) {
-      return res.status(400).json({ error: 'Please enter registered phone number and password.' });
-    }
-
-    const user = db.verifyCustomerLogin(phone, password);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid phone number or password.' });
-    }
-
-    const token = jwt.sign(
-      { id: user.id, phone: user.phone, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '30d' }
-    );
-
-    const profile = db.getCustomerProfile(user.id);
-    const safeUser = {
-      id: user.id,
-      phone: user.phone,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-      createdAt: user.createdAt,
-    };
-
-    res.json({
-      message: 'Login successful. Welcome back!',
-      token,
-      user: safeUser,
-      profile,
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Login failed' });
   }
 });
 
@@ -297,20 +283,45 @@ app.put('/api/auth/profile', requireCustomerAuth, (req: AuthenticatedRequest, re
 
 app.get('/api/settings', (req: Request, res: Response) => {
   try {
-    const deliverySettings = db.getDeliverySettings();
-    const deliveryAreas = db.getDeliveryAreas();
-    res.json({ deliverySettings, deliveryAreas });
+    const includeAudio = req.query.includeAudio === 'true';
+    const payload = db.getSettingsPayload(includeAudio);
+    res.json(payload);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
+app.get('/api/admin/sound-settings', (req: Request, res: Response) => {
+  try {
+    const notificationSound = db.getNotificationSound();
+    res.json(notificationSound);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/sound-settings', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    const { name, audioData } = req.body;
+    const updated = db.updateNotificationSound({
+      name: typeof name === 'string' && name.trim() ? name.trim() : 'Hotel Malabar Default Bell (Authentic 3-Strike MP3 Chime)',
+      audioData: typeof audioData === 'string' && audioData.trim() ? audioData.trim() : null,
+    });
+    res.json({ success: true, notificationSound: updated });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.get('/api/menu', (req: Request, res: Response) => {
   try {
-    const categories = db.getMenuCategories();
-    const items = db.getMenuItems();
-    const profile = db.getRestaurantProfile();
-    res.json({ categories, items, profile });
+    const versionTag = `"${db.getVersion()}"`;
+    res.setHeader('ETag', versionTag);
+    if (req.headers['if-none-match'] === versionTag) {
+      return res.status(304).end();
+    }
+    const payload = db.getMenuPayload();
+    res.json(payload);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -420,7 +431,7 @@ app.get('/api/orders/:orderId', (req: Request, res: Response) => {
       try {
         const decoded = jwt.verify(token, JWT_SECRET) as any;
         if (
-          (decoded.role === 'admin' && AUTHORIZED_ADMIN_PHONES.includes(decoded.phone)) ||
+          (decoded.role === 'admin' && db.isAdminPhone(decoded.phone)) ||
           (decoded.id === order.customerId)
         ) {
           isAuthorized = true;
@@ -443,27 +454,67 @@ app.get('/api/orders/:orderId', (req: Request, res: Response) => {
 });
 
 // ==========================================
+// FOOD RATINGS & REVIEWS
+// ==========================================
+
+// Rate food item after order is marked Delivered/Completed
+app.post('/api/ratings', requireCustomerAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { orderId, itemId, rating, review } = req.body;
+    if (!orderId || !itemId || rating === undefined) {
+      return res.status(400).json({ error: 'Order ID, Item ID, and Rating (1-5) are required.' });
+    }
+    const customerId = req.user!.id;
+    const result = db.addFoodRating({ orderId, itemId, rating: Number(rating), review }, customerId);
+    if (!result.success) {
+      return res.status(400).json({ error: result.message });
+    }
+    res.json({ success: true, rating: result.rating });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get ratings for a specific order (to display which items are already rated)
+app.get('/api/ratings/order/:orderId', (req: Request, res: Response) => {
+  try {
+    const ratings = db.getRatingsForOrder(req.params.orderId);
+    res.json({ ratings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
 // ADMIN DASHBOARD & RESTAURANT MANAGEMENT
 // ==========================================
 
+// Check if first-time admin setup has already been completed
+app.get('/api/admin/setup-status', (req: Request, res: Response) => {
+  res.json({
+    isConfigured: db.isAdminConfigured(),
+  });
+});
+
+// Admin Login requires Phone Number AND Admin Password validated server-side.
+// Phone number alone must NOT allow admin login. If wrong, login MUST be rejected.
 app.post('/api/admin/login', (req: Request, res: Response) => {
   try {
-    const { phone, identifier } = req.body;
+    const { phone, identifier, password } = req.body;
     const adminPhone = String(phone || identifier || '').trim();
+    const adminPassword = String(password || '').trim();
 
     if (!adminPhone) {
-      return res.status(400).json({ error: 'Authorized admin phone number is required.' });
+      return res.status(400).json({ error: 'Admin phone number is required.' });
     }
 
-    if (!AUTHORIZED_ADMIN_PHONES.includes(adminPhone as any)) {
-      return res.status(403).json({
-        error: 'Unauthorized Admin Number',
-      });
+    if (!adminPassword) {
+      return res.status(400).json({ error: 'Admin password is required.' });
     }
 
-    const admin = db.getAuthorizedAdminByPhone(adminPhone);
+    const admin = db.verifyAdminLogin(adminPhone, adminPassword);
     if (!admin) {
-      return res.status(403).json({ error: 'Unauthorized Admin Number' });
+      return res.status(401).json({ error: 'Invalid admin phone number or password.' });
     }
 
     const token = jwt.sign(
@@ -488,6 +539,66 @@ app.post('/api/admin/login', (req: Request, res: Response) => {
   }
 });
 
+// First-time Admin Setup: Available ONLY when admin account has NEVER been configured.
+// Once configured, this setup flow is permanently disabled.
+app.post(['/api/admin/setup', '/api/admin/set-password'], (req: Request, res: Response) => {
+  try {
+    if (db.isAdminConfigured()) {
+      return res.status(403).json({
+        error: 'Admin account has already been configured. Initial setup is permanently locked.',
+      });
+    }
+
+    const { phone, password, confirmPassword } = req.body;
+    const adminPhone = String(phone || '').trim();
+    const adminPassword = String(password || '').trim();
+    const adminConfirm = String(confirmPassword || '').trim();
+
+    if (!adminPhone) {
+      return res.status(400).json({ error: 'Admin phone number is required.' });
+    }
+
+    const cleanDigits = adminPhone.replace(/\D/g, '');
+    if (cleanDigits.length < 10) {
+      return res.status(400).json({ error: 'Please enter a valid 10-digit admin phone number.' });
+    }
+
+    if (!adminPassword) {
+      return res.status(400).json({ error: 'Admin password is required.' });
+    }
+
+    if (adminPassword.length < 8) {
+      return res.status(400).json({ error: 'Admin password must be at least 8 characters long.' });
+    }
+
+    if (adminConfirm && adminPassword !== adminConfirm) {
+      return res.status(400).json({ error: 'Passwords do not match. Please re-enter.' });
+    }
+
+    const admin = db.initialSetupAdmin(cleanDigits, adminPassword);
+
+    const token = jwt.sign(
+      { id: admin.id, phone: admin.phone, role: 'admin' },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      message: 'Admin account configured successfully.',
+      token,
+      admin: {
+        id: admin.id,
+        username: admin.username,
+        name: admin.name,
+        role: admin.role,
+        phone: admin.phone,
+      },
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Admin Session Status Check
 app.get('/api/admin/status', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
   res.json({
@@ -496,21 +607,9 @@ app.get('/api/admin/status', requireAdminAuth, (req: AuthenticatedRequest, res: 
   });
 });
 
-// Admin Password Update (Stored securely via bcrypt hashing)
-app.post('/api/admin/change-password', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Current password and new password are required.' });
-    }
-    if (!req.user || !req.user.phone) {
-      return res.status(403).json({ error: 'Unauthorized admin user session.' });
-    }
-    db.changeAdminPassword(req.user.phone, currentPassword, newPassword);
-    res.json({ message: 'Admin password updated securely.' });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
+// Password change/reset is permanently disallowed by security policy
+app.post('/api/admin/change-password', (req: Request, res: Response) => {
+  res.status(403).json({ error: 'Admin password change is permanently disabled.' });
 });
 
 // Get Orders for Admin
@@ -518,6 +617,54 @@ app.get('/api/admin/orders', requireAdminAuth, (req: Request, res: Response) => 
   try {
     const orders = db.getAllOrders();
     res.json(orders);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all customer ratings and reviews for Admin Panel
+app.get('/api/admin/ratings', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    const ratings = db.getAllRatings();
+    res.json(ratings);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Expenses Management (Requirement 4: Today's Expense & Net Amount from Real Database)
+app.get('/api/admin/expenses', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    const expenses = db.getAllExpenses();
+    res.json(expenses);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/expenses', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    const { date, title, category, amount, notes } = req.body;
+    if (!title || typeof amount !== 'number' || isNaN(amount)) {
+      return res.status(400).json({ error: 'Valid title and numeric amount are required.' });
+    }
+    const saved = db.addExpense({
+      date: date || new Date().toISOString().slice(0, 10),
+      title: String(title).trim(),
+      category: String(category || 'Kitchen & Operations').trim(),
+      amount: Math.abs(amount),
+      notes: notes ? String(notes).trim() : undefined,
+    });
+    res.json(saved);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/expenses/:id', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    const ok = db.deleteExpense(req.params.id);
+    res.json({ success: ok });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -581,16 +728,28 @@ app.get('/api/admin/customers', requireAdminAuth, (req: Request, res: Response) 
 app.post('/api/admin/menu/items', requireAdminAuth, (req: Request, res: Response) => {
   try {
     const { categoryId, name, description, price, imageUrl, isVeg, isAvailable, prepTimeMinutes } = req.body;
-    if (!categoryId || !name || price === undefined) {
-      return res.status(400).json({ error: 'Category, name, and price are required.' });
+    const itemName = String(name || '').trim();
+    if (!itemName) {
+      return res.status(400).json({ error: 'Item name is required.' });
+    }
+
+    const numPrice = Number(price);
+    if (price === undefined || isNaN(numPrice) || numPrice <= 0) {
+      return res.status(400).json({ error: 'A valid price greater than 0 is required.' });
+    }
+
+    let resolvedCatId = String(categoryId || '').trim();
+    if (!resolvedCatId) {
+      const allCats = db.getMenuCategories();
+      resolvedCatId = allCats[0]?.id || 'cat_biryani';
     }
 
     const newItem = db.addMenuItem({
-      categoryId,
-      name,
-      description: description || '',
-      price: Number(price),
-      imageUrl: imageUrl || 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80',
+      categoryId: resolvedCatId,
+      name: itemName,
+      description: String(description || '').trim(),
+      price: numPrice,
+      imageUrl: imageUrl !== undefined ? String(imageUrl).trim() : '',
       isVeg: Boolean(isVeg),
       isAvailable: isAvailable !== undefined ? Boolean(isAvailable) : true,
       prepTimeMinutes: Number(prepTimeMinutes) || 10,
@@ -603,10 +762,135 @@ app.post('/api/admin/menu/items', requireAdminAuth, (req: Request, res: Response
   }
 });
 
+// AI Menu Card Photo Extraction Endpoint
+app.post('/api/admin/menu/extract-photos', requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { images } = req.body;
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({ error: 'Please upload at least one menu card photo.' });
+    }
+
+    const categories = db.getMenuCategories().map((c) => ({ id: c.id, name: c.name }));
+    const extracted = await extractMenuItemsFromPhotos(images, categories);
+
+    // Requirement 5 & 6:
+    // Do NOT use the uploaded menu-card photo as the food item's photo.
+    // New imported food items must have a blank/empty food-photo field.
+    const itemsWithBlankPhoto = extracted.map((item) => ({
+      ...item,
+      imageUrl: '', // strictly blank
+    }));
+
+    res.json({
+      success: true,
+      count: itemsWithBlankPhoto.length,
+      items: itemsWithBlankPhoto,
+    });
+  } catch (err: any) {
+    console.error('Menu card photo extraction failed:', err);
+    res.status(500).json({
+      error: err.message || 'Failed to extract menu items from photo. Please ensure photos are clear and legible.',
+    });
+  }
+});
+
+// Batch Add Menu Items (Used by AI Menu Card Import)
+app.post('/api/admin/menu/items/batch', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    const { items } = req.body;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'No items provided to import.' });
+    }
+
+    const allCategories = db.getMenuCategories();
+    const validCatIds = new Set(allCategories.map((c) => c.id));
+    const fallbackCatId = allCategories[0]?.id || 'cat_biryani';
+
+    const itemsToInsert = items.map((raw: any, index: number) => {
+      const name = String(raw.name || '').trim();
+      if (!name) {
+        throw new Error(`Item #${index + 1} must have a name.`);
+      }
+
+      const numPrice = Number(raw.price);
+      const safePrice = !isNaN(numPrice) && numPrice >= 0 ? numPrice : 0;
+      const categoryId = validCatIds.has(raw.categoryId) ? raw.categoryId : fallbackCatId;
+
+      return {
+        categoryId,
+        name,
+        description: String(raw.description || '').trim(),
+        price: safePrice,
+        // Requirement 5 & 6: Blank food photo field
+        imageUrl: '',
+        isVeg: Boolean(raw.isVeg),
+        isAvailable: raw.isAvailable !== undefined ? Boolean(raw.isAvailable) : true,
+        prepTimeMinutes: Number(raw.prepTimeMinutes) || 10,
+        sortOrder: 99,
+      };
+    });
+
+    // Requirement 11: Do not delete or replace existing menu items
+    const createdItems = db.addMenuItemsBatch(itemsToInsert);
+
+    res.status(201).json({
+      success: true,
+      count: createdItems.length,
+      items: createdItems,
+      message: `Successfully added ${createdItems.length} items to the menu.`,
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.put('/api/admin/menu/items/:id', requireAdminAuth, (req: Request, res: Response) => {
   try {
     const updated = db.updateMenuItem(req.params.id, req.body);
     res.json({ item: updated, message: 'Menu item updated.' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.patch('/api/admin/menu/items/:id/availability', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    const { isAvailable } = req.body;
+    if (typeof isAvailable !== 'boolean') {
+      return res.status(400).json({ error: 'isAvailable boolean is required' });
+    }
+    const updated = db.updateMenuItem(req.params.id, { isAvailable });
+    res.json({
+      success: true,
+      item: updated,
+      message: `"${updated.name}" is now marked as ${isAvailable ? 'Available' : 'Out of Stock'}.`,
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/menu/items/batch-availability', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    const { itemIds, isAvailable } = req.body;
+    if (!Array.isArray(itemIds) || typeof isAvailable !== 'boolean') {
+      return res.status(400).json({ error: 'itemIds array and isAvailable boolean are required' });
+    }
+    const updatedItems = [];
+    for (const id of itemIds) {
+      try {
+        const updated = db.updateMenuItem(id, { isAvailable });
+        updatedItems.push(updated);
+      } catch (err) {
+        console.warn(`Could not update item ${id}:`, err);
+      }
+    }
+    res.json({
+      success: true,
+      count: updatedItems.length,
+      items: updatedItems,
+      message: `Updated ${updatedItems.length} items to ${isAvailable ? 'Available' : 'Out of Stock'}.`,
+    });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -864,6 +1148,22 @@ export async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    // In dev mode, handle SPA fallback (such as /admin, /admin/login, etc.)
+    app.get('*', async (req: Request, res: Response, next: NextFunction) => {
+      if (req.path.startsWith('/api')) {
+        return next();
+      }
+      try {
+        const indexPath = path.resolve(process.cwd(), 'index.html');
+        let html = fs.readFileSync(indexPath, 'utf-8');
+        html = await vite.transformIndexHtml(req.originalUrl, html);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+      } catch (e: any) {
+        vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
