@@ -11,44 +11,42 @@ function updateFile(path, transform) {
   }
 }
 
-// This script is intentionally idempotent because aic-build-fix.cjs may have
-// already applied the same separation changes earlier in the build.
+// Idempotent build-time separation fix. It is safe when aic-build-fix.cjs has
+// already made the same changes earlier in the build.
 updateFile('src/App.tsx', (source) => {
   let s = source;
 
   s = s.replace(
-    "const [viewMode, setViewMode] = useState<'customer' | 'admin'>('admin');",
+    /const \[viewMode, setViewMode\] = useState<'customer' \| 'admin'>\([^;]+\);/,
     "const [viewMode, setViewMode] = useState<'customer' | 'admin'>(isAdminPath() ? 'admin' : 'customer');"
   );
 
-  s = s.replace(
-    /const handleLocationChange = \(\) => \{\s*\/\/ Default to admin panel unless user explicitly navigates to \/customer\s*const isCustomerExplicit =\s*window\.location\.pathname === '\/customer' \|\|\s*window\.location\.hash === '#customer' \|\|\s*window\.location\.search\.includes\('view=customer'\);\s*setViewMode\(isCustomerExplicit \? 'customer' : 'admin'\);\s*\};/m,
-    "const handleLocationChange = () => {\n      // Strict separation: only /admin opens the admin application.\n      // Every other URL opens the customer website.\n      setViewMode(isAdminPath() ? 'admin' : 'customer');\n    };"
-  );
-
-  s = s.replace(
-    /\n\s*const handleKeyDown = \(e: KeyboardEvent\) => \{[\s\S]*?\n\s*\};\n\s*\n\s*window\.addEventListener\('popstate', handleLocationChange\);/m,
-    "\n\n    window.addEventListener('popstate', handleLocationChange);"
-  );
-
-  s = s.replace(/\s*onOpenAdmin=\{navigateToAdmin\}/g, '');
-
-  if (s.includes("useState<'customer' | 'admin'>('admin')") || s.includes('isCustomerExplicit')) {
-    throw new Error('Customer/admin routing patch did not fully apply to App.tsx');
+  // Replace the complete navigation effect so no stale handleKeyDown reference
+  // can survive an older partial patch.
+  const start = s.indexOf('  // Listen for browser navigation changes');
+  const end = s.indexOf('\n\n  const navigateToCustomer', start);
+  if (start !== -1 && end !== -1) {
+    const effect = `  // Listen for browser navigation changes. Admin is reachable only via /admin*.\n  useEffect(() => {\n    const handleLocationChange = () => {\n      setViewMode(isAdminPath() ? 'admin' : 'customer');\n    };\n\n    const originalPushState = window.history.pushState;\n    const originalReplaceState = window.history.replaceState;\n\n    window.history.pushState = function (...args) {\n      const res = originalPushState.apply(this, args);\n      handleLocationChange();\n      return res;\n    };\n\n    window.history.replaceState = function (...args) {\n      const res = originalReplaceState.apply(this, args);\n      handleLocationChange();\n      return res;\n    };\n\n    window.addEventListener('popstate', handleLocationChange);\n    window.addEventListener('hashchange', handleLocationChange);\n\n    return () => {\n      window.history.pushState = originalPushState;\n      window.history.replaceState = originalReplaceState;\n      window.removeEventListener('popstate', handleLocationChange);\n      window.removeEventListener('hashchange', handleLocationChange);\n    };\n  }, []);`;
+    s = s.slice(0, start) + effect + s.slice(end);
   }
 
+  // Remove any legacy shortcut code/references anywhere in App.tsx.
+  s = s.replace(/\n\s*const handleKeyDown = \(e: KeyboardEvent\) => \{[\s\S]*?\n\s*\};/g, '');
+  s = s.replace(/\n\s*window\.addEventListener\('keydown', handleKeyDown\);/g, '');
+  s = s.replace(/\n\s*window\.removeEventListener\('keydown', handleKeyDown\);/g, '');
+  s = s.replace(/\s*onOpenAdmin=\{navigateToAdmin\}/g, '');
+
+  if (s.includes('handleKeyDown')) throw new Error('Customer/admin routing guard: stale handleKeyDown reference remains in App.tsx');
+  if (/useState<'customer' \| 'admin'>\('admin'\)/.test(s)) throw new Error('Customer/admin routing guard: App.tsx still defaults to admin');
   return s;
 });
 
 updateFile('src/components/CustomerFirstScreen.tsx', (source) => {
   let s = source;
-  s = s.replace(/,?\s*onOpenAdmin\??\s*:\s*\(\)\s*=>\s*void\s*[,;]?/g, '');
-  s = s.replace(/,?\s*onOpenAdmin\s*[,;]?/g, '');
-  s = s.replace(/\{\s*onOpenAdmin\s*&&\s*\([\s\S]*?\)\s*\}/g, '');
-  s = s.replace(/onOpenAdmin\??/g, '');
-  if (s.includes('onOpenAdmin')) {
-    throw new Error('Customer landing screen still contains an Admin Portal entry point');
-  }
+  s = s.replace(/\n\s*onOpenAdmin\??\s*:\s*\(\)\s*=>\s*void\s*[,;]?/g, '');
+  s = s.replace(/\n\s*onOpenAdmin\s*[,;]?/g, '');
+  s = s.replace(/\s*\{\s*onOpenAdmin\s*&&\s*\([\s\S]*?\)\s*\}/g, '');
+  s = s.replace(/\bonOpenAdmin\??/g, '');
   return s;
 });
 
