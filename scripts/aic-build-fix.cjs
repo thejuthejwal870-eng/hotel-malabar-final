@@ -51,4 +51,36 @@ admin = admin.replace(/9567562071/g, 'REMOVED_ADMIN_PHONE');
 admin = admin.replace(/admin123/g, 'REMOVED_ADMIN_PASSWORD');
 
 fs.writeFileSync(adminFile, admin, 'utf8');
-console.log('Hotel Malabar AIC build fixes applied.');
+
+// AIC App Hosting may start dist/server.cjs directly instead of using our wrapper.
+// Patch the actual server build so customer orders are written to Supabase and
+// admin order reads refresh from Supabase before querying the local in-memory DB.
+replaceOnce(
+  'server.ts',
+  "import { db } from './server/db.ts';",
+  "import { db } from './server/db.ts';\nimport { syncFromSupabase, syncToSupabase } from './server/supabase-sync.ts';"
+);
+replaceOnce(
+  'server.ts',
+  "app.post('/api/orders', requireCustomerAuth, (req: AuthenticatedRequest, res: Response) => {",
+  "app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, res: Response) => {"
+);
+replaceOnce(
+  'server.ts',
+  "    const order = db.createOrder({\n      customerId: user.id,\n      customerName: `${user.firstName} ${user.lastName}`.trim(),\n      customerPhone: user.phone,\n      deliveryAddress,\n      deliveryArea,\n      items,\n      specialInstructions,\n      customerLatitude: lat,\n      customerLongitude: lng,\n    });\n\n    res.status(201).json({",
+  "    const order = db.createOrder({\n      customerId: user.id,\n      customerName: `${user.firstName} ${user.lastName}`.trim(),\n      customerPhone: user.phone,\n      deliveryAddress,\n      deliveryArea,\n      items,\n      specialInstructions,\n      customerLatitude: lat,\n      customerLongitude: lng,\n    });\n\n    await syncToSupabase();\n\n    res.status(201).json({"
+);
+replaceOnce(
+  'server.ts',
+  "app.get('/api/admin/orders', requireAdminAuth, (req: Request, res: Response) => {\n  try {\n    const date = req.query.date ? String(req.query.date) : undefined;",
+  "app.get('/api/admin/orders', requireAdminAuth, async (req: Request, res: Response) => {\n  try {\n    await syncFromSupabase();\n    db.reloadFromDisk();\n    const date = req.query.date ? String(req.query.date) : undefined;"
+);
+
+// Add a small database reload hook so an admin process can see orders written by another AIC instance.
+replaceOnce(
+  'server/db.ts',
+  "  public getVersion(): number {\n    return this.version;\n  }",
+  "  public reloadFromDisk(): void {\n    try {\n      if (!fs.existsSync(DATA_FILE)) return;\n      const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));\n      if (!parsed || !Array.isArray(parsed.users) || !Array.isArray(parsed.orders)) return;\n      this.data = parsed as DatabaseData;\n      this.menuCache = null;\n      this.version++;\n    } catch (error) {\n      console.error('Failed to reload database from disk:', error);\n    }\n  }\n\n  public getVersion(): number {\n    return this.version;\n  }"
+);
+
+console.log('Hotel Malabar AIC build fixes and Supabase order sync applied.');
