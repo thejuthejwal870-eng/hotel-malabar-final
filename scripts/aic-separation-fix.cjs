@@ -3,13 +3,16 @@ const fs = require('fs');
 function updateFile(path, transform) {
   const source = fs.readFileSync(path, 'utf8');
   const updated = transform(source);
-  if (updated === source) {
-    throw new Error(`AIC separation fix made no changes in ${path}`);
+  if (updated !== source) {
+    fs.writeFileSync(path, updated, 'utf8');
+    console.log(`AIC separation fix applied: ${path}`);
+  } else {
+    console.log(`AIC separation fix already applied: ${path}`);
   }
-  fs.writeFileSync(path, updated, 'utf8');
-  console.log(`AIC separation fix applied: ${path}`);
 }
 
+// This script is intentionally idempotent because aic-build-fix.cjs may have
+// already applied the same separation changes earlier in the build.
 updateFile('src/App.tsx', (source) => {
   let s = source;
 
