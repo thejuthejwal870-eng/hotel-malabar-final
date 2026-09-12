@@ -56,7 +56,7 @@ replaceOnce(
 replaceOnce(
   'server.ts',
   "    const order = db.createOrder({\n      customerId: user.id,\n      customerName: `${user.firstName} ${user.lastName}`.trim(),\n      customerPhone: user.phone,\n      deliveryAddress,\n      deliveryArea,\n      items,\n      specialInstructions,\n      customerLatitude: lat,\n      customerLongitude: lng,\n    });\n\n    res.status(201).json({",
-  "    const order = db.createOrder({\n      customerId: user.id,\n      customerName: `${user.firstName} ${user.lastName}`.trim(),\n      customerPhone: user.phone,\n      deliveryAddress,\n      deliveryArea,\n      items,\n      specialInstructions,\n      customerLatitude: lat,\n      customerLongitude: lng,\n    });\n\n    await syncToSupabase();\n\n    res.status(201).json({"
+  "    // Refresh the shared database immediately before creating the order so this\n    // instance does not overwrite a newer order/customer change from another instance.\n    await syncFromSupabase();\n    db.reloadFromDisk();\n\n    const order = db.createOrder({\n      customerId: user.id,\n      customerName: `${user.firstName} ${user.lastName}`.trim(),\n      customerPhone: user.phone,\n      deliveryAddress,\n      deliveryArea,\n      items,\n      specialInstructions,\n      customerLatitude: lat,\n      customerLongitude: lng,\n    });\n\n    await syncToSupabase();\n\n    res.status(201).json({"
 );
 replaceOnce(
   'server.ts',
