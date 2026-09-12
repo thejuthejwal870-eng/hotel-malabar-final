@@ -6,7 +6,7 @@ import { db } from './server/db.ts';
 import { extractMenuItemsFromPhotos } from './server/gemini.ts';
 
 export const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'hotel-malabar-secure-secret-key-2026';
 
 app.use(express.json({ limit: '35mb' }));
@@ -457,46 +457,38 @@ app.get('/api/orders/:orderId', (req: Request, res: Response) => {
 // FOOD RATINGS & REVIEWS
 // ==========================================
 
-// Rate food item after order is marked Delivered/Completed
 app.post('/api/ratings', requireCustomerAuth, (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { orderId, itemId, rating, review } = req.body;
-    if (!orderId || !itemId || rating === undefined) {
-      return res.status(400).json({ error: 'Order ID, Item ID, and Rating (1-5) are required.' });
+    const { orderId, itemId, rating, review } = req.body || {};
+    const numericRating = Number(rating);
+    if (!orderId || !itemId || !numericRating || numericRating < 1 || numericRating > 5) {
+      return res.status(400).json({ error: 'Order, item and a rating from 1 to 5 are required.' });
     }
-    const customerId = req.user!.id;
-    const result = db.addFoodRating({ orderId, itemId, rating: Number(rating), review }, customerId);
-    if (!result.success) {
-      return res.status(400).json({ error: result.message });
-    }
-    res.json({ success: true, rating: result.rating });
+    const saved = db.addFoodRating({
+      orderId: String(orderId),
+      customerId: req.user!.id,
+      itemId: String(itemId),
+      rating: numericRating,
+      review: review ? String(review).trim() : undefined,
+    });
+    res.status(201).json({ rating: saved, message: 'Thank you for rating this food.' });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
-// Get ratings for a specific order (to display which items are already rated)
-app.get('/api/ratings/order/:orderId', (req: Request, res: Response) => {
+app.get('/api/ratings/menu', (req: Request, res: Response) => {
   try {
-    const ratings = db.getRatingsForOrder(req.params.orderId);
-    res.json({ ratings });
+    res.json(db.getMenuRatings());
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ==========================================
-// ADMIN DASHBOARD & RESTAURANT MANAGEMENT
+// ADMIN AUTH & SETUP
 // ==========================================
 
-// Check if first-time admin setup has already been completed
-app.get('/api/admin/setup-status', (req: Request, res: Response) => {
-  res.json({
-    isConfigured: db.isAdminConfigured(),
-  });
-});
-
-// Admin Login requires Phone Number AND Admin Password validated server-side.
 // Phone number alone must NOT allow admin login. If wrong, login MUST be rejected.
 app.post('/api/admin/login', (req: Request, res: Response) => {
   try {
@@ -557,34 +549,25 @@ app.post(['/api/admin/setup', '/api/admin/set-password'], (req: Request, res: Re
     if (!adminPhone) {
       return res.status(400).json({ error: 'Admin phone number is required.' });
     }
-
-    const cleanDigits = adminPhone.replace(/\D/g, '');
-    if (cleanDigits.length < 10) {
-      return res.status(400).json({ error: 'Please enter a valid 10-digit admin phone number.' });
-    }
-
     if (!adminPassword) {
       return res.status(400).json({ error: 'Admin password is required.' });
     }
-
-    if (adminPassword.length < 8) {
-      return res.status(400).json({ error: 'Admin password must be at least 8 characters long.' });
+    if (adminPassword.length < 6) {
+      return res.status(400).json({ error: 'Admin password must be at least 6 characters.' });
+    }
+    if (adminPassword !== adminConfirm) {
+      return res.status(400).json({ error: 'Passwords do not match.' });
     }
 
-    if (adminConfirm && adminPassword !== adminConfirm) {
-      return res.status(400).json({ error: 'Passwords do not match. Please re-enter.' });
-    }
-
-    const admin = db.initialSetupAdmin(cleanDigits, adminPassword);
-
+    const admin = db.setupInitialAdmin({ phone: adminPhone, password: adminPassword });
     const token = jwt.sign(
       { id: admin.id, phone: admin.phone, role: 'admin' },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.json({
-      message: 'Admin account configured successfully.',
+    res.status(201).json({
+      message: 'Admin account created successfully. Initial setup is now permanently locked.',
       token,
       admin: {
         id: admin.id,
@@ -595,48 +578,72 @@ app.post(['/api/admin/setup', '/api/admin/set-password'], (req: Request, res: Re
       },
     });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message || 'Admin setup failed' });
   }
 });
 
-// Admin Session Status Check
-app.get('/api/admin/status', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
-  res.json({
-    status: 'ok',
-    admin: req.user,
-  });
+app.get('/api/admin/me', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const admin = db.findUserById(req.user!.id);
+    if (!admin || admin.role !== 'admin') {
+      return res.status(404).json({ error: 'Admin account not found.' });
+    }
+    res.json({
+      id: admin.id,
+      phone: admin.phone,
+      username: admin.username,
+      name: admin.name,
+      role: admin.role,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Password change/reset is permanently disallowed by security policy
-app.post('/api/admin/change-password', (req: Request, res: Response) => {
-  res.status(403).json({ error: 'Admin password change is permanently disabled.' });
+app.get('/api/admin/config-status', (req: Request, res: Response) => {
+  try {
+    res.json({ configured: db.isAdminConfigured() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Get Orders for Admin
+// ==========================================
+// ADMIN ORDERS / SALES / CUSTOMERS
+// ==========================================
+
 app.get('/api/admin/orders', requireAdminAuth, (req: Request, res: Response) => {
   try {
-    const orders = db.getAllOrders();
-    res.json(orders);
+    const date = req.query.date ? String(req.query.date) : undefined;
+    const status = req.query.status ? String(req.query.status) : undefined;
+    res.json(db.getAdminOrders({ date, status }));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Get all customer ratings and reviews for Admin Panel
-app.get('/api/admin/ratings', requireAdminAuth, (req: Request, res: Response) => {
+app.get('/api/admin/sales-summary', requireAdminAuth, (req: Request, res: Response) => {
   try {
-    const ratings = db.getAllRatings();
-    res.json(ratings);
+    const date = req.query.date ? String(req.query.date) : undefined;
+    res.json(db.getSalesSummary(date));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Admin Expenses Management (Requirement 4: Today's Expense & Net Amount from Real Database)
+app.get('/api/admin/customers', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    const customers = db.getAllCustomersWithOrders();
+    res.json(customers);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/admin/expenses', requireAdminAuth, (req: Request, res: Response) => {
   try {
-    const expenses = db.getAllExpenses();
-    res.json(expenses);
+    const date = req.query.date ? String(req.query.date) : undefined;
+    res.json(db.getExpenses(date));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -644,9 +651,9 @@ app.get('/api/admin/expenses', requireAdminAuth, (req: Request, res: Response) =
 
 app.post('/api/admin/expenses', requireAdminAuth, (req: Request, res: Response) => {
   try {
-    const { date, title, category, amount, notes } = req.body;
-    if (!title || typeof amount !== 'number' || isNaN(amount)) {
-      return res.status(400).json({ error: 'Valid title and numeric amount are required.' });
+    const { date, title, category, amount, notes } = req.body || {};
+    if (!title || amount === undefined || amount === null || Number(amount) <= 0) {
+      return res.status(400).json({ error: 'Expense title and a positive amount are required.' });
     }
     const saved = db.addExpense({
       date: date || new Date().toISOString().slice(0, 10),
@@ -724,121 +731,22 @@ app.get('/api/admin/customers', requireAdminAuth, (req: Request, res: Response) 
   }
 });
 
-// Admin Menu Management
+// ==========================================
+// ADMIN MENU
+// ==========================================
+
+app.get('/api/admin/menu', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    res.json(db.getMenuPayload());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/admin/menu/items', requireAdminAuth, (req: Request, res: Response) => {
   try {
-    const { categoryId, name, description, price, imageUrl, isVeg, isAvailable, prepTimeMinutes } = req.body;
-    const itemName = String(name || '').trim();
-    if (!itemName) {
-      return res.status(400).json({ error: 'Item name is required.' });
-    }
-
-    const numPrice = Number(price);
-    if (price === undefined || isNaN(numPrice) || numPrice <= 0) {
-      return res.status(400).json({ error: 'A valid price greater than 0 is required.' });
-    }
-
-    let resolvedCatId = String(categoryId || '').trim();
-    if (!resolvedCatId) {
-      const allCats = db.getMenuCategories();
-      resolvedCatId = allCats[0]?.id || 'cat_biryani';
-    }
-
-    const newItem = db.addMenuItem({
-      categoryId: resolvedCatId,
-      name: itemName,
-      description: String(description || '').trim(),
-      price: numPrice,
-      imageUrl: imageUrl !== undefined ? String(imageUrl).trim() : '',
-      isVeg: Boolean(isVeg),
-      isAvailable: isAvailable !== undefined ? Boolean(isAvailable) : true,
-      prepTimeMinutes: Number(prepTimeMinutes) || 10,
-      sortOrder: 99,
-    });
-
-    res.status(201).json({ item: newItem, message: 'Menu item created successfully.' });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// AI Menu Card Photo Extraction Endpoint
-app.post('/api/admin/menu/extract-photos', requireAdminAuth, async (req: Request, res: Response) => {
-  try {
-    const { images } = req.body;
-    if (!images || !Array.isArray(images) || images.length === 0) {
-      return res.status(400).json({ error: 'Please upload at least one menu card photo.' });
-    }
-
-    const categories = db.getMenuCategories().map((c) => ({ id: c.id, name: c.name }));
-    const extracted = await extractMenuItemsFromPhotos(images, categories);
-
-    // Requirement 5 & 6:
-    // Do NOT use the uploaded menu-card photo as the food item's photo.
-    // New imported food items must have a blank/empty food-photo field.
-    const itemsWithBlankPhoto = extracted.map((item) => ({
-      ...item,
-      imageUrl: '', // strictly blank
-    }));
-
-    res.json({
-      success: true,
-      count: itemsWithBlankPhoto.length,
-      items: itemsWithBlankPhoto,
-    });
-  } catch (err: any) {
-    console.error('Menu card photo extraction failed:', err);
-    res.status(500).json({
-      error: err.message || 'Failed to extract menu items from photo. Please ensure photos are clear and legible.',
-    });
-  }
-});
-
-// Batch Add Menu Items (Used by AI Menu Card Import)
-app.post('/api/admin/menu/items/batch', requireAdminAuth, (req: Request, res: Response) => {
-  try {
-    const { items } = req.body;
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'No items provided to import.' });
-    }
-
-    const allCategories = db.getMenuCategories();
-    const validCatIds = new Set(allCategories.map((c) => c.id));
-    const fallbackCatId = allCategories[0]?.id || 'cat_biryani';
-
-    const itemsToInsert = items.map((raw: any, index: number) => {
-      const name = String(raw.name || '').trim();
-      if (!name) {
-        throw new Error(`Item #${index + 1} must have a name.`);
-      }
-
-      const numPrice = Number(raw.price);
-      const safePrice = !isNaN(numPrice) && numPrice >= 0 ? numPrice : 0;
-      const categoryId = validCatIds.has(raw.categoryId) ? raw.categoryId : fallbackCatId;
-
-      return {
-        categoryId,
-        name,
-        description: String(raw.description || '').trim(),
-        price: safePrice,
-        // Requirement 5 & 6: Blank food photo field
-        imageUrl: '',
-        isVeg: Boolean(raw.isVeg),
-        isAvailable: raw.isAvailable !== undefined ? Boolean(raw.isAvailable) : true,
-        prepTimeMinutes: Number(raw.prepTimeMinutes) || 10,
-        sortOrder: 99,
-      };
-    });
-
-    // Requirement 11: Do not delete or replace existing menu items
-    const createdItems = db.addMenuItemsBatch(itemsToInsert);
-
-    res.status(201).json({
-      success: true,
-      count: createdItems.length,
-      items: createdItems,
-      message: `Successfully added ${createdItems.length} items to the menu.`,
-    });
+    const item = db.addMenuItem(req.body);
+    res.status(201).json(item);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -846,51 +754,8 @@ app.post('/api/admin/menu/items/batch', requireAdminAuth, (req: Request, res: Re
 
 app.put('/api/admin/menu/items/:id', requireAdminAuth, (req: Request, res: Response) => {
   try {
-    const updated = db.updateMenuItem(req.params.id, req.body);
-    res.json({ item: updated, message: 'Menu item updated.' });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.patch('/api/admin/menu/items/:id/availability', requireAdminAuth, (req: Request, res: Response) => {
-  try {
-    const { isAvailable } = req.body;
-    if (typeof isAvailable !== 'boolean') {
-      return res.status(400).json({ error: 'isAvailable boolean is required' });
-    }
-    const updated = db.updateMenuItem(req.params.id, { isAvailable });
-    res.json({
-      success: true,
-      item: updated,
-      message: `"${updated.name}" is now marked as ${isAvailable ? 'Available' : 'Out of Stock'}.`,
-    });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/admin/menu/items/batch-availability', requireAdminAuth, (req: Request, res: Response) => {
-  try {
-    const { itemIds, isAvailable } = req.body;
-    if (!Array.isArray(itemIds) || typeof isAvailable !== 'boolean') {
-      return res.status(400).json({ error: 'itemIds array and isAvailable boolean are required' });
-    }
-    const updatedItems = [];
-    for (const id of itemIds) {
-      try {
-        const updated = db.updateMenuItem(id, { isAvailable });
-        updatedItems.push(updated);
-      } catch (err) {
-        console.warn(`Could not update item ${id}:`, err);
-      }
-    }
-    res.json({
-      success: true,
-      count: updatedItems.length,
-      items: updatedItems,
-      message: `Updated ${updatedItems.length} items to ${isAvailable ? 'Available' : 'Out of Stock'}.`,
-    });
+    const item = db.updateMenuItem(req.params.id, req.body);
+    res.json(item);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
