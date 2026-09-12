@@ -1,5 +1,8 @@
 const fs = require('fs');
 
+// AIC production runtime: never start Vite dev/HMR in the live app.
+process.env.NODE_ENV = 'production';
+
 const DATA_FILE = '/tmp/hotel_malabar.json';
 
 function supabaseConfig() {
@@ -75,11 +78,10 @@ async function syncToSupabase() {
 }
 
 (async () => {
-  // Load the shared database BEFORE the application starts.
+  // Load shared database before the production Express bundle starts.
   await syncFromSupabase();
 
-  // db.ts writes atomically with renameSync(tmp, /tmp/hotel_malabar.json).
-  // Hook that final rename so every customer/admin database change is persisted.
+  // Persist every atomic database write back to Supabase.
   const originalRenameSync = fs.renameSync;
   fs.renameSync = function (oldPath, newPath) {
     const result = originalRenameSync.call(fs, oldPath, newPath);
@@ -89,5 +91,6 @@ async function syncToSupabase() {
     return result;
   };
 
+  // IMPORTANT: start the compiled Express bundle only; no Vite/HMR/dev server.
   require('../dist/app.cjs');
 })();
