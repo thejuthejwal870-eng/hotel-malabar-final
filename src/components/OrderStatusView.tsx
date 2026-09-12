@@ -14,6 +14,7 @@ import {
   ExternalLink,
   UtensilsCrossed,
   Sparkles,
+  Star,
 } from 'lucide-react';
 import { Order, OrderStatus } from '../types';
 
@@ -56,6 +57,78 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
   const [refreshing, setRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
 
+  // Food ratings for delivered orders
+  const [orderRatings, setOrderRatings] = useState<Record<string, { rating: number; review?: string }>>({});
+  const [ratingInputs, setRatingInputs] = useState<Record<string, { rating: number; review: string; hover: number }>>({});
+  const [submittingRating, setSubmittingRating] = useState<Record<string, boolean>>({});
+  const [ratingError, setRatingError] = useState<Record<string, string>>({});
+
+  const fetchOrderRatings = async () => {
+    try {
+      const res = await fetch(`/api/ratings/order/${orderId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ratings && Array.isArray(data.ratings)) {
+          const map: Record<string, { rating: number; review?: string }> = {};
+          data.ratings.forEach((r: any) => {
+            map[r.itemId] = { rating: r.rating, review: r.review };
+          });
+          setOrderRatings(map);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch order ratings:', e);
+    }
+  };
+
+  const handleSubmitRating = async (itemId: string) => {
+    const input = ratingInputs[itemId] || { rating: 5, review: '', hover: 0 };
+    if (!input.rating || input.rating < 1 || input.rating > 5) {
+      setRatingError((prev) => ({ ...prev, [itemId]: 'Please select a rating between 1 and 5 stars' }));
+      return;
+    }
+
+    try {
+      setSubmittingRating((prev) => ({ ...prev, [itemId]: true }));
+      setRatingError((prev) => ({ ...prev, [itemId]: '' }));
+
+      const token = localStorage.getItem('hm_customer_token');
+      const res = await fetch('/api/ratings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          orderId,
+          itemId,
+          rating: input.rating,
+          review: input.review ? input.review.trim() : '',
+        }),
+      });
+
+      const resData = await res.json();
+      if (!res.ok) {
+        setRatingError((prev) => ({ ...prev, [itemId]: resData.error || 'Failed to submit rating' }));
+        return;
+      }
+
+      setOrderRatings((prev) => ({
+        ...prev,
+        [itemId]: { rating: input.rating, review: input.review ? input.review.trim() : '' },
+      }));
+
+      // Notify window so App.tsx menu updates average ratings
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hm_rating_submitted', { detail: { itemId, rating: input.rating } }));
+      }
+    } catch (err: any) {
+      setRatingError((prev) => ({ ...prev, [itemId]: err.message || 'Error submitting rating' }));
+    } finally {
+      setSubmittingRating((prev) => ({ ...prev, [itemId]: false }));
+    }
+  };
+
   const fetchOrder = async (isManual = false) => {
     try {
       if (isManual) setRefreshing(true);
@@ -64,8 +137,20 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) {
-        const data = await res.json();
-        setOrder(data);
+        const data: Order = await res.json();
+        setOrder((prev) => {
+          if (
+            prev &&
+            prev.id === data.id &&
+            prev.status === data.status &&
+            prev.estimatedReadyAt === data.estimatedReadyAt &&
+            prev.preparationMinutes === data.preparationMinutes &&
+            prev.updatedAt === data.updatedAt
+          ) {
+            return prev;
+          }
+          return data;
+        });
       }
     } catch (err) {
       console.warn('Order status sync: reconnecting...');
@@ -75,14 +160,26 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
     }
   };
 
-  // Poll server every 2.5 seconds for real-time status updates from Admin
+  // Poll server every 2.5 seconds for real-time status updates (paused when tab hidden or completed)
   useEffect(() => {
     fetchOrder();
     const pollInterval = setInterval(() => {
-      fetchOrder();
+      if (!document.hidden) {
+        fetchOrder();
+      }
     }, 2500);
 
-    return () => clearInterval(pollInterval);
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        fetchOrder();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [orderId]);
 
   // Live 1-second countdown clock for the timer
@@ -93,6 +190,12 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
 
     return () => clearInterval(timerInterval);
   }, []);
+
+  useEffect(() => {
+    if (order && normalizeStatusKey(order.status) === 'DELIVERED') {
+      fetchOrderRatings();
+    }
+  }, [order?.status, orderId]);
 
   // Compute remaining time and formatted ready time
   const timerInfo = useMemo(() => {
@@ -358,6 +461,195 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                 <p className="text-xs text-emerald-100 mt-1 font-medium">
                   Thank you for ordering with Hotel Malabar. Enjoy your authentic Malabar feast!
                 </p>
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* RATE EACH ORDERED FOOD ITEM (Requirement 1)                               */}
+            {/* ========================================================================= */}
+            {normalizedStatus === 'DELIVERED' && (
+              <div className="mt-4 bg-[#091a10] border-2 border-[#dfb64c]/70 rounded-2xl p-4 shadow-xl space-y-4">
+                <div className="flex items-center justify-between pb-2.5 border-b border-[#1b432a]">
+                  <div className="flex items-center gap-2">
+                    <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
+                    <div>
+                      <h4 className="font-brand font-bold text-sm text-[#fcfaf6]">
+                        Rate Your Food Items
+                      </h4>
+                      <p className="text-[11px] text-[#8ea896]">
+                        How was the taste? Rate each item (1 to 5 stars)
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-[#143d26] text-[#dfb64c] border border-[#245937] px-2 py-0.5 rounded-full">
+                    Verified Order
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {order.items.map((item) => {
+                    const existingRating = orderRatings[item.itemId];
+                    const input = ratingInputs[item.itemId] || { rating: 5, review: '', hover: 0 };
+                    const isSubmitting = submittingRating[item.itemId];
+                    const error = ratingError[item.itemId];
+
+                    return (
+                      <div
+                        key={item.id || item.itemId}
+                        className="bg-[#0f2d1c] border border-[#1f4e30] rounded-xl p-3 space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <span className="font-bold text-xs sm:text-sm text-[#fcfaf6] block">
+                              {item.itemName}
+                            </span>
+                            <span className="text-[11px] text-[#8ea896]">
+                              Qty: {item.quantity} • ₹{item.price} each
+                            </span>
+                          </div>
+
+                          {existingRating ? (
+                            <div className="flex items-center gap-1 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 px-2 py-1 rounded-lg text-xs font-bold shrink-0">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Rated {existingRating.rating}/5</span>
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {existingRating ? (
+                          <div className="bg-[#08170e] border border-emerald-800/30 rounded-lg p-2 text-xs space-y-1">
+                            <div className="flex items-center gap-1 text-amber-400">
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star
+                                  key={s}
+                                  className={`w-3.5 h-3.5 ${
+                                    s <= existingRating.rating
+                                      ? 'fill-amber-400 text-amber-400'
+                                      : 'text-stone-700'
+                                  }`}
+                                />
+                              ))}
+                              <span className="ml-1 text-[11px] text-emerald-300 font-medium">
+                                Thank you for rating this item!
+                              </span>
+                            </div>
+                            {existingRating.review && (
+                              <p className="text-[11px] text-[#a6bfae] italic">
+                                "{existingRating.review}"
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-2 pt-1 border-t border-[#163f27]">
+                            {/* Star Selector */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1">
+                                {[1, 2, 3, 4, 5].map((starNum) => {
+                                  const displayStar = input.hover || input.rating;
+                                  return (
+                                    <button
+                                      key={starNum}
+                                      type="button"
+                                      onClick={() =>
+                                        setRatingInputs((prev) => ({
+                                          ...prev,
+                                          [item.itemId]: {
+                                            ...prev[item.itemId],
+                                            rating: starNum,
+                                            review: prev[item.itemId]?.review || '',
+                                            hover: 0,
+                                          },
+                                        }))
+                                      }
+                                      onMouseEnter={() =>
+                                        setRatingInputs((prev) => ({
+                                          ...prev,
+                                          [item.itemId]: {
+                                            ...prev[item.itemId],
+                                            rating: prev[item.itemId]?.rating || 5,
+                                            review: prev[item.itemId]?.review || '',
+                                            hover: starNum,
+                                          },
+                                        }))
+                                      }
+                                      onMouseLeave={() =>
+                                        setRatingInputs((prev) => ({
+                                          ...prev,
+                                          [item.itemId]: {
+                                            ...prev[item.itemId],
+                                            hover: 0,
+                                          },
+                                        }))
+                                      }
+                                      className="p-1 text-stone-600 hover:scale-110 transition-transform cursor-pointer focus:outline-none"
+                                      title={`${starNum} star`}
+                                    >
+                                      <Star
+                                        className={`w-5 h-5 transition-colors ${
+                                          starNum <= displayStar
+                                            ? 'fill-amber-400 text-amber-400'
+                                            : 'text-stone-600'
+                                        }`}
+                                      />
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <span className="text-xs font-bold text-[#dfb64c] font-mono">
+                                {input.rating || 5} of 5 Stars
+                              </span>
+                            </div>
+
+                            {/* Optional Review Text */}
+                            <input
+                              type="text"
+                              value={input.review || ''}
+                              onChange={(e) =>
+                                setRatingInputs((prev) => ({
+                                  ...prev,
+                                  [item.itemId]: {
+                                    ...prev[item.itemId],
+                                    rating: prev[item.itemId]?.rating || 5,
+                                    hover: 0,
+                                    review: e.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder="Write a brief comment (optional)..."
+                              maxLength={160}
+                              className="w-full bg-[#08170e] border border-[#235836] rounded-lg px-2.5 py-1.5 text-xs text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
+                            />
+
+                            {error && (
+                              <p className="text-[11px] text-red-400 font-medium">
+                                {error}
+                              </p>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleSubmitRating(item.itemId)}
+                              disabled={isSubmitting}
+                              className="w-full py-1.5 px-3 rounded-lg bg-[#dfb64c] hover:bg-[#ebd074] disabled:opacity-50 text-[#0a1f13] text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow"
+                            >
+                              {isSubmitting ? (
+                                <>
+                                  <RefreshCw className="w-3 h-3 animate-spin" />
+                                  <span>Submitting...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Star className="w-3.5 h-3.5 fill-[#0a1f13]" />
+                                  <span>Submit Rating</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

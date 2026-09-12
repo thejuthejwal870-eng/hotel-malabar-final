@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 
 interface WatermarkedImageProps {
   src: string;
@@ -10,7 +10,7 @@ interface WatermarkedImageProps {
 
 export const WATERMARK_TEXT = 'This is made by INSTA ID @thee.juuu';
 
-export const WatermarkedImage: React.FC<WatermarkedImageProps> = ({
+export const WatermarkedImage: React.FC<WatermarkedImageProps> = memo(({
   src,
   alt,
   className = '',
@@ -22,6 +22,9 @@ export const WatermarkedImage: React.FC<WatermarkedImageProps> = ({
   const fallbackSrc =
     'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80';
 
+  const cleanSrc = (src || '').trim();
+  const effectiveSrc = !cleanSrc || hasError ? fallbackSrc : cleanSrc;
+
   const sizeClasses = {
     sm: 'text-[9px] sm:text-[10px] py-1 px-2',
     md: 'text-[11px] sm:text-[12px] py-1.5 px-2.5',
@@ -31,11 +34,12 @@ export const WatermarkedImage: React.FC<WatermarkedImageProps> = ({
   return (
     <div className={`relative overflow-hidden group select-none ${className}`}>
       <img
-        src={hasError ? fallbackSrc : src}
+        src={effectiveSrc}
         alt={alt}
         onError={() => setHasError(true)}
         className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${imgClassName}`}
         loading="lazy"
+        decoding="async"
         referrerPolicy="no-referrer"
       />
       {/* Subtle overlay gradient to make bottom text readable without obstructing food */}
@@ -51,4 +55,4 @@ export const WatermarkedImage: React.FC<WatermarkedImageProps> = ({
       </div>
     </div>
   );
-};
+});

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import {
   X,
   Trash2,
@@ -33,7 +33,7 @@ interface CustomerCartDrawerProps {
   onOrderPlaced: (order: Order) => void;
 }
 
-export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
+export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
   isOpen,
   onClose,
   cartItems,
@@ -153,10 +153,21 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
   const isMinOrderMet = foodTotal >= deliverySettings.minOrderAmount;
   const amountNeededForMin = Math.max(0, deliverySettings.minOrderAmount - foodTotal);
 
+  // Check for any out-of-stock items in cart
+  const outOfStockItems = cartItems.filter((ci) => !ci.menuItem.isAvailable);
+  const hasOutOfStock = outOfStockItems.length > 0;
+
   const handleProceedToConfirm = () => {
     setError(null);
     if (cartItems.length === 0) {
       setError('Your cart is empty.');
+      return;
+    }
+    if (hasOutOfStock) {
+      const names = outOfStockItems.map((ci) => `"${ci.menuItem.name}"`).join(', ');
+      setError(
+        `Cannot place order: ${names} ${outOfStockItems.length > 1 ? 'are' : 'is'} currently out of stock. Please remove from your cart to proceed.`
+      );
       return;
     }
     if (!isMinOrderMet) {
@@ -269,65 +280,88 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
                 </button>
               </div>
 
-              {cartItems.map(({ menuItem, quantity }) => (
-                <div
-                  key={menuItem.id}
-                  className="p-3 bg-[#113320] border border-[#214f34] rounded-xl flex items-center justify-between gap-3 shadow-sm"
-                >
-                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                    <div
-                      className={`w-3 h-3 shrink-0 rounded-sm border flex items-center justify-center ${
-                        menuItem.isVeg
-                          ? 'border-emerald-500 bg-emerald-950'
-                          : 'border-red-500 bg-red-950'
-                      }`}
-                    >
+              {cartItems.map(({ menuItem, quantity }) => {
+                const isOutOfStock = menuItem.isAvailable === false;
+                return (
+                  <div
+                    key={menuItem.id}
+                    className={`p-3 rounded-xl flex items-center justify-between gap-3 shadow-sm border ${
+                      isOutOfStock
+                        ? 'bg-red-950/30 border-red-800/80'
+                        : 'bg-[#113320] border-[#214f34]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
                       <div
-                        className={`w-1.5 h-1.5 ${
-                          menuItem.isVeg ? 'rounded-full bg-emerald-400' : 'rotate-45 bg-red-400'
+                        className={`w-3 h-3 shrink-0 rounded-sm border flex items-center justify-center ${
+                          menuItem.isVeg
+                            ? 'border-emerald-500 bg-emerald-950'
+                            : 'border-red-500 bg-red-950'
                         }`}
-                      />
+                      >
+                        <div
+                          className={`w-1.5 h-1.5 ${
+                            menuItem.isVeg ? 'rounded-full bg-emerald-400' : 'rotate-45 bg-red-400'
+                          }`}
+                        />
+                      </div>
+                      <div className="truncate">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-xs sm:text-sm font-semibold text-[#fcfaf6] truncate">
+                            {menuItem.name}
+                          </h4>
+                          {isOutOfStock && (
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider bg-red-900 text-red-100 border border-red-700 px-1.5 py-0.5 rounded shrink-0">
+                              OUT OF STOCK
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-[#dfb64c] font-mono">
+                          ₹{menuItem.price} × {quantity} = ₹{menuItem.price * quantity}
+                        </span>
+                      </div>
                     </div>
-                    <div className="truncate">
-                      <h4 className="text-xs sm:text-sm font-semibold text-[#fcfaf6] truncate">
-                        {menuItem.name}
-                      </h4>
-                      <span className="text-[11px] text-[#dfb64c] font-mono">
-                        ₹{menuItem.price} × {quantity} = ₹{menuItem.price * quantity}
-                      </span>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <div className="flex items-center gap-1.5 bg-[#0a1f13] border border-[#1e4c30] rounded-lg p-1">
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 bg-[#0a1f13] border border-[#1e4c30] rounded-lg p-1">
+                        <button
+                          onClick={() => onUpdateQuantity(menuItem.id, -1)}
+                          className="w-6 h-6 rounded bg-[#163e26] hover:bg-[#1f5635] text-[#fdfbf7] flex items-center justify-center cursor-pointer"
+                          title="Decrease quantity"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="font-mono text-xs text-[#dfb64c] font-bold px-1.5">
+                          {quantity}
+                        </span>
+                        <button
+                          disabled={isOutOfStock}
+                          onClick={() => !isOutOfStock && onUpdateQuantity(menuItem.id, 1)}
+                          className={`w-6 h-6 rounded flex items-center justify-center font-bold ${
+                            isOutOfStock
+                              ? 'bg-stone-800 text-stone-600 cursor-not-allowed'
+                              : 'bg-[#dfb64c] hover:bg-[#ecd06b] text-[#0a1f13] cursor-pointer'
+                          }`}
+                          title={isOutOfStock ? 'Item is out of stock' : 'Increase quantity'}
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
                       <button
-                        onClick={() => onUpdateQuantity(menuItem.id, -1)}
-                        className="w-6 h-6 rounded bg-[#163e26] hover:bg-[#1f5635] text-[#fdfbf7] flex items-center justify-center cursor-pointer"
-                        title="Decrease quantity"
+                        onClick={() => onRemoveItem(menuItem.id)}
+                        className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                          isOutOfStock
+                            ? 'text-red-300 bg-red-950/80 hover:bg-red-900/90 border border-red-700'
+                            : 'text-[#8ea896] hover:text-red-400 hover:bg-red-950/40'
+                        }`}
+                        title={isOutOfStock ? 'Remove unavailable item' : 'Remove item'}
                       >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="font-mono text-xs text-[#dfb64c] font-bold px-1.5">
-                        {quantity}
-                      </span>
-                      <button
-                        onClick={() => onUpdateQuantity(menuItem.id, 1)}
-                        className="w-6 h-6 rounded bg-[#dfb64c] hover:bg-[#ecd06b] text-[#0a1f13] flex items-center justify-center font-bold cursor-pointer"
-                        title="Increase quantity"
-                      >
-                        <Plus className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <button
-                      onClick={() => onRemoveItem(menuItem.id)}
-                      className="p-1.5 text-[#8ea896] hover:text-red-400 hover:bg-red-950/40 rounded-lg cursor-pointer transition-colors"
-                      title="Remove item"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -543,6 +577,23 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
                 </div>
               )}
 
+              {/* Out of Stock Warning */}
+              {hasOutOfStock && (
+                <div className="p-3.5 bg-red-950/90 border-2 border-red-500 rounded-xl text-xs text-red-200 flex items-start gap-2.5 shadow-md">
+                  <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block text-white font-bold uppercase tracking-wide">
+                      OUT OF STOCK ITEMS IN CART
+                    </strong>
+                    <span>
+                      {outOfStockItems.map((ci) => `"${ci.menuItem.name}"`).join(', ')}{' '}
+                      {outOfStockItems.length > 1 ? 'are' : 'is'} currently out of stock. Please remove{' '}
+                      {outOfStockItems.length > 1 ? 'them' : 'it'} to place your order.
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Minimum Order Check Warning */}
               {!isMinOrderMet && (
                 <div className="p-3 bg-amber-950/80 border border-amber-800/80 rounded-xl text-xs text-amber-200 flex items-start gap-2">
@@ -577,20 +628,26 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
           <div className="p-4 border-t border-[#1b432a] bg-[#0d2819] sticky bottom-0 z-10 space-y-2">
             <button
               id="proceed-checkout-btn"
-              disabled={!isMinOrderMet || !isRestaurantOpen}
+              disabled={!isMinOrderMet || !isRestaurantOpen || hasOutOfStock}
               onClick={handleProceedToConfirm}
-              className={`w-full font-bold text-sm sm:text-base py-3.5 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] ${
-                isRestaurantOpen
-                  ? 'bg-gradient-to-r from-[#dfb64c] to-[#cba135] hover:from-[#e8c560] hover:to-[#d7b23d] text-[#0a1f13]'
-                  : 'bg-red-950/80 text-red-300 border border-red-800 cursor-not-allowed'
+              className={`w-full font-bold text-sm sm:text-base py-3.5 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 min-h-[44px] ${
+                !isRestaurantOpen
+                  ? 'bg-red-950/80 text-red-300 border border-red-800 cursor-not-allowed'
+                  : hasOutOfStock
+                  ? 'bg-red-950/70 border border-red-700 text-red-300 cursor-not-allowed opacity-90'
+                  : !isMinOrderMet
+                  ? 'bg-[#123620] text-stone-400 border border-[#214f34] cursor-not-allowed opacity-60'
+                  : 'bg-gradient-to-r from-[#dfb64c] to-[#cba135] hover:from-[#e8c560] hover:to-[#d7b23d] text-[#0a1f13] cursor-pointer'
               }`}
             >
               <span>
-                {isRestaurantOpen
-                  ? `Review Order & Place (₹${grandTotal})`
-                  : 'RESTAURANT CLOSED (Orders Disabled)'}
+                {!isRestaurantOpen
+                  ? 'RESTAURANT CLOSED (Orders Disabled)'
+                  : hasOutOfStock
+                  ? 'REMOVE OUT-OF-STOCK ITEMS TO PROCEED'
+                  : `Review Order & Place (₹${grandTotal})`}
               </span>
-              {isRestaurantOpen && <ArrowRight className="w-4 h-4" />}
+              {isRestaurantOpen && !hasOutOfStock && isMinOrderMet && <ArrowRight className="w-4 h-4" />}
             </button>
           </div>
         )}
@@ -707,4 +764,4 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
       </div>
     </div>
   );
-};
+});

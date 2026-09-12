@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { MenuCategory } from '../types';
 
 interface CategoryFilterProps {
@@ -8,7 +8,7 @@ interface CategoryFilterProps {
   categoryCounts: Record<string, number>;
 }
 
-export const CategoryFilter: React.FC<CategoryFilterProps> = ({
+export const CategoryFilter: React.FC<CategoryFilterProps> = memo(({
   categories,
   selectedCategoryId,
   onSelectCategory,
@@ -78,4 +78,4 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
       </div>
     </div>
   );
-};
+});

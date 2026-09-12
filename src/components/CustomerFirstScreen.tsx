@@ -7,12 +7,14 @@ interface CustomerFirstScreenProps {
   restaurantProfile?: RestaurantProfile | null;
   onCreateAccount: () => void;
   onLogin: () => void;
+  onOpenAdmin?: () => void;
 }
 
 export const CustomerFirstScreen: React.FC<CustomerFirstScreenProps> = ({
   restaurantProfile,
   onCreateAccount,
   onLogin,
+  onOpenAdmin,
 }) => {
   const restaurantName = restaurantProfile?.name || 'HOTEL MALABAR';
   const tagline = restaurantProfile?.tagline || 'Authentic Thalassery Biryani, Handcrafted Kerala Porottas, Fresh Coastal Seafood, Alfaham, and traditional Malabar delicacies delivered hot to your doorstep.';
@@ -146,7 +148,7 @@ export const CustomerFirstScreen: React.FC<CustomerFirstScreenProps> = ({
         </div>
 
         <p className="text-xs text-[#8ea896] max-w-sm">
-          Please create an account or sign in to explore our 22 authentic food categories and place your delivery order.
+          Please enter your phone number and name to explore our authentic Kerala menu and place your delivery order.
         </p>
       </main>
 
@@ -156,8 +158,17 @@ export const CustomerFirstScreen: React.FC<CustomerFirstScreenProps> = ({
           <span>Serving: Bommasandra • Yarandahalli • Jigani • Electronic City</span>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           <span>© Hotel Malabar • Authentic Coastal & Malabar Delicacies</span>
+          {onOpenAdmin && (
+            <button
+              id="customer-first-screen-admin-btn"
+              onClick={onOpenAdmin}
+              className="text-[#62846f] hover:text-[#dfb64c] transition-colors text-[11px] underline underline-offset-2 cursor-pointer ml-auto"
+            >
+              Admin Portal
+            </button>
+          )}
         </div>
       </footer>
     </div>

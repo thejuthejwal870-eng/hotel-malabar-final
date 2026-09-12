@@ -1,5 +1,5 @@
-import React from 'react';
-import { Plus, Minus, Clock, Flame, Leaf } from 'lucide-react';
+import React, { memo } from 'react';
+import { Plus, Minus, Clock, Flame, Leaf, Star } from 'lucide-react';
 import { MenuItem } from '../types';
 import { WatermarkedImage } from './WatermarkedImage';
 
@@ -13,7 +13,7 @@ interface FoodCardProps {
   onUpdateQuantity: (itemId: string, delta: number) => void;
 }
 
-export const FoodCard: React.FC<FoodCardProps> = ({
+export const FoodCard: React.FC<FoodCardProps> = memo(({
   item,
   categoryName,
   cartQuantity,
@@ -35,7 +35,11 @@ export const FoodCard: React.FC<FoodCardProps> = ({
     <div
       id={`food-card-${item.id}`}
       className={`bg-[#0f2a1b] border ${
-        cartQuantity > 0 ? 'border-[#dfb64c]' : 'border-[#1f4a2e]'
+        cartQuantity > 0
+          ? 'border-[#dfb64c]'
+          : itemOutOfStock
+          ? 'border-red-900/60'
+          : 'border-[#1f4a2e]'
       } rounded-2xl overflow-hidden shadow-lg transition-all duration-300 hover:border-[#dfb64c]/70 hover:shadow-2xl flex flex-col justify-between`}
     >
       {/* Food Image with Watermark */}
@@ -43,7 +47,7 @@ export const FoodCard: React.FC<FoodCardProps> = ({
         <WatermarkedImage
           src={item.imageUrl}
           alt={`Hotel Malabar ${item.name}`}
-          className="w-full h-full"
+          className={`w-full h-full ${itemOutOfStock ? 'grayscale-[35%] opacity-80' : ''}`}
           watermarkSize="sm"
         />
 
@@ -79,7 +83,7 @@ export const FoodCard: React.FC<FoodCardProps> = ({
 
         {/* Overlays for Closed Restaurant, Closed Category, or Out of Stock */}
         {restaurantClosed && (
-          <div className="absolute inset-0 bg-black/75 backdrop-blur-[1px] z-20 flex flex-col items-center justify-center p-3 text-center">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-[1px] z-20 flex flex-col items-center justify-center p-3 text-center">
             <span className="text-red-300 font-bold text-xs uppercase tracking-wider bg-red-950/90 px-2.5 py-1 rounded-lg border border-red-800">
               RESTAURANT CLOSED
             </span>
@@ -87,7 +91,7 @@ export const FoodCard: React.FC<FoodCardProps> = ({
         )}
 
         {categoryClosed && (
-          <div className="absolute inset-0 bg-black/75 backdrop-blur-[1px] z-20 flex flex-col items-center justify-center p-3 text-center">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-[1px] z-20 flex flex-col items-center justify-center p-3 text-center">
             <span className="text-amber-300 font-bold text-xs uppercase tracking-wider bg-amber-950/90 px-2.5 py-1 rounded-lg border border-amber-800">
               CURRENTLY UNAVAILABLE
             </span>
@@ -95,10 +99,11 @@ export const FoodCard: React.FC<FoodCardProps> = ({
         )}
 
         {itemOutOfStock && (
-          <div className="absolute inset-0 bg-black/75 backdrop-blur-[1px] z-20 flex flex-col items-center justify-center p-3 text-center">
-            <span className="text-red-300 font-bold text-xs uppercase tracking-wider bg-red-950/90 px-2.5 py-1 rounded-lg border border-red-800">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-[1px] z-20 flex flex-col items-center justify-center p-3 text-center">
+            <span className="text-red-100 font-extrabold text-xs uppercase tracking-wider bg-red-950/95 px-3 py-1.5 rounded-lg border border-red-700 shadow-md">
               OUT OF STOCK
             </span>
+            <span className="text-[10px] text-red-300 mt-1 font-medium">Currently unavailable</span>
           </div>
         )}
       </div>
@@ -107,14 +112,46 @@ export const FoodCard: React.FC<FoodCardProps> = ({
       <div className="p-4 flex-1 flex flex-col justify-between">
         <div>
           <div className="flex items-start justify-between gap-2 mb-1.5">
-            <h3 className="font-semibold text-base sm:text-lg text-[#fcfaf6] leading-snug">
-              {item.name}
-            </h3>
+            <div className="flex-1">
+              <h3 className="font-semibold text-base sm:text-lg text-[#fcfaf6] leading-snug">
+                {item.name}
+              </h3>
+              {itemOutOfStock && (
+                <span className="inline-block text-[10px] font-bold text-red-400 uppercase tracking-wider bg-red-950/70 border border-red-800/80 px-1.5 py-0.5 rounded mt-0.5">
+                  OUT OF STOCK
+                </span>
+              )}
+            </div>
             <div className="text-right shrink-0">
               <span className="font-bold text-base sm:text-lg text-[#dfb64c] font-mono">
                 ₹{item.price}
               </span>
             </div>
+          </div>
+
+          {/* Average Rating & Review Count (Requirement 1) */}
+          <div className="flex items-center gap-1.5 mb-2.5">
+            {item.totalRatings && item.totalRatings > 0 ? (
+              <>
+                <div className="flex items-center gap-0.5 bg-amber-950/80 border border-amber-500/40 text-amber-300 px-1.5 py-0.5 rounded-md text-[11px] font-bold">
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  <span>{(item.averageRating || 0).toFixed(1)}</span>
+                </div>
+                <span className="text-[11px] text-[#8ea896]">
+                  ({item.totalRatings} {item.totalRatings === 1 ? 'rating' : 'ratings'})
+                </span>
+              </>
+            ) : (
+              <div className="flex items-center gap-1 text-[11px] text-[#71917d]">
+                <Star className="w-3 h-3 text-stone-600" />
+                <span>No ratings yet</span>
+              </div>
+            )}
+            {item.orderCount && item.orderCount > 0 ? (
+              <span className="text-[10px] text-[#dfb64c] bg-[#143d26] border border-[#235836] px-1.5 py-0.5 rounded font-medium ml-auto">
+                🔥 {item.orderCount} ordered
+              </span>
+            ) : null}
           </div>
 
           <p className="text-xs text-[#a3bfae] line-clamp-2 leading-relaxed mb-4">
@@ -185,4 +222,4 @@ export const FoodCard: React.FC<FoodCardProps> = ({
       </div>
     </div>
   );
-};
+});

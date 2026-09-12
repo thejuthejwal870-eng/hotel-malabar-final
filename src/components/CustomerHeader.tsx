@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { ShoppingBag, Clock, Phone, LogOut, UtensilsCrossed, Search, User } from 'lucide-react';
 import { User as UserType, RestaurantProfile } from '../types';
 import { WatermarkedImage } from './WatermarkedImage';
@@ -16,7 +16,7 @@ interface CustomerHeaderProps {
   onLogout: () => void;
 }
 
-export const CustomerHeader: React.FC<CustomerHeaderProps> = ({
+export const CustomerHeader: React.FC<CustomerHeaderProps> = memo(({
   user,
   restaurantProfile,
   cartCount,
@@ -170,4 +170,4 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({
       </div>
     </header>
   );
-};
+});

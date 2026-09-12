@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Bell,
   Printer,
@@ -20,6 +20,9 @@ import {
   Volume2,
   VolumeX,
   Eye,
+  EyeOff,
+  KeyRound,
+  Phone,
   Sliders,
   ArrowLeft,
   ChevronDown,
@@ -36,7 +39,16 @@ import {
   Lock,
   Menu as MenuIcon,
   X as XIcon,
+  Sparkles,
+  History,
+  Star,
+  Calendar,
+  IndianRupee,
+  Receipt,
+  Calculator,
+  ChevronRight,
 } from 'lucide-react';
+import { MenuCardImportModal } from './MenuCardImportModal';
 import {
   Order,
   OrderStatus,
@@ -45,6 +57,8 @@ import {
   DeliverySettings,
   DeliveryArea,
   RestaurantProfile,
+  FoodRating,
+  DailyExpense,
 } from '../types';
 import { WatermarkedImage } from './WatermarkedImage';
 import { applyWatermarkToImageFile, EXACT_WATERMARK_TEXT } from '../utils/watermark';
@@ -52,34 +66,89 @@ import {
   playNewOrderChime,
   playTestChime,
   unlockAudio,
-  getCustomSoundName,
-  saveCustomSound,
-  resetCustomSound,
-} from '../utils/audio';f
+  setCustomAudio,
+  resetCustomAudio,
+  getCurrentSoundName,
+  hasCustomAudio,
+  DEFAULT_SOUND_NAME,
+} from '../utils/audio';
 import { printThermalOrder } from '../utils/thermalPrinter';
 import { AdminProfileManager } from './AdminProfileManager';
 import { AdminCategoryManager } from './AdminCategoryManager';
+import { AdminSalesSummary } from './AdminSalesSummary';
+import {
+  getLocalDateString,
+  isOrderToday,
+  isOrderFromDate,
+  isPendingNewOrder,
+  isAcceptedOrder,
+  isRejectedOrder,
+  isValidOrder,
+  formatDateLabel,
+  formatCalendarDate,
+  groupOrdersByDate,
+  calculateDateSalesMetrics,
+} from '../utils/orderUtils';
 
 interface AdminDashboardProps {
   onBackToCustomerSite: () => void;
 }
 
+const AdminOrderCountdown: React.FC<{ readyMs: number }> = React.memo(({ readyMs }) => {
+  const [now, setNow] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const diffSec = Math.floor((readyMs - now) / 1000);
+  if (diffSec > 0) {
+    const m = Math.floor(diffSec / 60);
+    const s = diffSec % 60;
+    return (
+      <div className="font-mono text-emerald-300 font-bold flex items-center gap-1.5 bg-[#123620] px-2 py-1 rounded border border-[#245937]">
+        <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+        <span>Remaining Time: {m}m {s < 10 ? '0' : ''}{s}s ({Math.ceil(diffSec / 60)} mins left)</span>
+      </div>
+    );
+  } else {
+    return (
+      <div className="font-bold text-amber-300 flex items-center gap-1.5 bg-amber-950/80 px-2 py-1 rounded border border-amber-600/40">
+        <span>⚠️ Food should be ready now</span>
+      </div>
+    );
+  }
+});
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomerSite }) => {
   // Auth state - strictly secure, no credentials hardcoded in frontend
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [adminToken, setAdminToken] = useState<string | null>(null);
+  const [isAdminConfigured, setIsAdminConfigured] = useState<boolean | null>(null);
   const [adminPhone, setAdminPhone] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [adminAuthMode, setAdminAuthMode] = useState<'login' | 'setPassword'>('login');
+  const [authSuccessMessage, setAuthSuccessMessage] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
   const [restaurantProfile, setRestaurantProfile] = useState<RestaurantProfile | null>(null);
 
   // Navigation tab & mobile sidebar drawer
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'categories' | 'profile' | 'delivery' | 'customers'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'categories' | 'profile' | 'delivery' | 'customers' | 'settings' | 'ratings'>('orders');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Data states
   const [orders, setOrders] = useState<Order[]>([]);
+  const ordersRef = useRef<Order[]>(orders);
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>({
@@ -116,6 +185,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     repeatSoundRef.current = repeatSoundUntilAccepted;
   }, [repeatSoundUntilAccepted]);
 
+  // Custom new order sound state (Step 6)
+  const [currentSoundName, setCurrentSoundName] = useState<string>(() => getCurrentSoundName());
+  const [hasCustomSound, setHasCustomSound] = useState<boolean>(() => hasCustomAudio());
+  const [isSoundTesting, setIsSoundTesting] = useState(false);
+  const [soundUploadError, setSoundUploadError] = useState<string | null>(null);
+  const [soundSuccessToast, setSoundSuccessToast] = useState<string | null>(null);
+
   // Audio alert banner for latest received order
   const [audioAlertBanner, setAudioAlertBanner] = useState<{
     orderId: string;
@@ -129,24 +205,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   const [selectedOrderForKOT, setSelectedOrderForKOT] = useState<Order | null>(null);
 
   // Filters & Search
-  const [orderFilter, setOrderFilter] = useState<'all' | 'new' | 'active' | 'completed' | 'rejected'>('all');
+  const [orderFilter, setOrderFilter] = useState<'all' | 'new' | 'accepted' | 'today' | 'rejected' | 'history' | 'active' | 'completed'>('new');
+  // Current calendar date state (YYYY-MM-DD), dynamically checked and updated at midnight turnover
+  const [currentCalendarDate, setCurrentCalendarDate] = useState<string>(() => getLocalDateString());
+  const [salesSummaryDate, setSalesSummaryDate] = useState<string>(() => getLocalDateString());
+  const [historyDateFilter, setHistoryDateFilter] = useState<string>('all');
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [menuSearch, setMenuSearch] = useState('');
   const [selectedMenuCategory, setSelectedMenuCategory] = useState<string>('all');
+
+  // Daily Expenses
+  const [expenses, setExpenses] = useState<DailyExpense[]>([]);
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [expenseSubmitting, setExpenseSubmitting] = useState(false);
+  const [expenseForm, setExpenseForm] = useState({
+    date: getLocalDateString(),
+    title: '',
+    category: 'Kitchen & Groceries',
+    amount: '',
+    notes: '',
+  });
 
   // Modals
   const [prepTimeModalOrder, setPrepTimeModalOrder] = useState<Order | null>(null);
   const [selectedPrepMinutes, setSelectedPrepMinutes] = useState(15);
   const [customPrepMinutes, setCustomPrepMinutes] = useState('');
-  const [adminClock, setAdminClock] = useState<number>(Date.now());
-
-  // 1-second live ticker for remaining time display
-  useEffect(() => {
-    const clockInterval = setInterval(() => {
-      setAdminClock(Date.now());
-    }, 1000);
-    return () => clearInterval(clockInterval);
-  }, []);
 
   const [itemModalOpen, setItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -161,17 +245,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     prepTimeMinutes: '10',
   });
   const [imageUploading, setImageUploading] = useState(false);
+  const [isSavingItem, setIsSavingItem] = useState(false);
+  const [itemSaveError, setItemSaveError] = useState<string | null>(null);
+
+  // Refs for food photo file upload and device camera capture
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // AI Menu Card Photo Import states
+  const [aiImportModalOpen, setAiImportModalOpen] = useState(false);
+  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
+
+  // Out of Stock / Availability management states
+  const [updatingAvailabilityItemId, setUpdatingAvailabilityItemId] = useState<string | null>(null);
+  const [availabilityToast, setAvailabilityToast] = useState<{
+    itemName: string;
+    isAvailable: boolean;
+    timestamp: number;
+  } | null>(null);
+  const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'out_of_stock'>('all');
+  const [selectedOutOfStockByOrder, setSelectedOutOfStockByOrder] = useState<Record<string, string[]>>({});
+  const [markingOutOfStockOrderId, setMarkingOutOfStockOrderId] = useState<string | null>(null);
 
   const [customerOrdersModal, setCustomerOrdersModal] = useState<any | null>(null);
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+
+  // Customer Food Ratings & Reviews
+  const [ratings, setRatings] = useState<FoodRating[]>([]);
+  const [ratingsFilter, setRatingsFilter] = useState<'all' | '5' | '4' | '3' | '2' | '1'>('all');
+  const [ratingsSearchQuery, setRatingsSearchQuery] = useState('');
+  const [quickPhotoLoadingId, setQuickPhotoLoadingId] = useState<string | null>(null);
 
   // Track previous orders to alert on genuine new ones
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
   const isInitialOrderLoadRef = useRef<boolean>(true);
   const printedOrdersRef = useRef<Set<string>>(new Set());
 
-  // Check saved admin token on mount and verify with backend
+  // Check admin setup status and saved admin token on mount
   useEffect(() => {
+    fetch('/api/admin/setup-status')
+      .then((res) => res.json())
+      .then((data) => {
+        const configured = Boolean(data?.isConfigured);
+        setIsAdminConfigured(configured);
+        if (!configured) {
+          setAdminAuthMode('setPassword');
+        } else {
+          setAdminAuthMode('login');
+        }
+      })
+      .catch(() => {
+        setIsAdminConfigured(true);
+        setAdminAuthMode('login');
+      });
+
+    const performAutoAdminLogin = () => {
+      fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: '9567562071', password: 'admin123' }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.token) {
+            localStorage.setItem('hm_admin_token', data.token);
+            setAdminToken(data.token);
+            setIsAdminLoggedIn(true);
+          }
+        })
+        .catch((err) => {
+          console.warn('Auto admin login fallback:', err);
+        });
+    };
+
     const savedToken = localStorage.getItem('hm_admin_token');
     if (savedToken) {
       fetch('/api/admin/status', {
@@ -183,15 +329,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
             setIsAdminLoggedIn(true);
           } else {
             localStorage.removeItem('hm_admin_token');
-            setAdminToken(null);
-            setIsAdminLoggedIn(false);
+            performAutoAdminLogin();
           }
         })
         .catch(() => {
-          localStorage.removeItem('hm_admin_token');
-          setAdminToken(null);
-          setIsAdminLoggedIn(false);
+          performAutoAdminLogin();
         });
+    } else {
+      performAutoAdminLogin();
     }
   }, []);
 
@@ -201,23 +346,59 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
 
     fetchAllAdminData();
     const interval = setInterval(() => {
-      fetchOrdersOnly();
+      if (!document.hidden) {
+        fetchOrdersOnly();
+      }
     }, 4000);
 
-    return () => clearInterval(interval);
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        fetchOrdersOnly();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [isAdminLoggedIn, adminToken]);
+
+  // AUTOMATIC MIDNIGHT RESET EFFECT:
+  // At 12:00 AM when the calendar date changes, automatically update currentCalendarDate
+  // and reset salesSummaryDate so Today's dashboard, counts, and sales reset to 0 immediately!
+  useEffect(() => {
+    const handleCheckDate = () => {
+      const nowYMD = getLocalDateString();
+      setCurrentCalendarDate((prev) => {
+        if (prev !== nowYMD) {
+          // Calendar date changed (midnight turnover!)
+          // Reset salesSummaryDate to the new date automatically so Today's sales summary starts at 0
+          setSalesSummaryDate(nowYMD);
+          setExpenseForm((f) => ({ ...f, date: nowYMD }));
+          return nowYMD;
+        }
+        return prev;
+      });
+    };
+
+    const midnightTimer = setInterval(handleCheckDate, 2000);
+    return () => clearInterval(midnightTimer);
+  }, []);
 
   const fetchAllAdminData = async () => {
     if (!adminToken) return;
     try {
       const headers = { Authorization: `Bearer ${adminToken}` };
 
-      const [ordersRes, menuRes, settingsRes, customersRes, profileRes] = await Promise.all([
+      const [ordersRes, menuRes, settingsRes, customersRes, profileRes, ratingsRes, expensesRes] = await Promise.all([
         fetch('/api/admin/orders', { headers }),
         fetch('/api/menu'),
-        fetch('/api/settings'),
+        fetch('/api/settings?includeAudio=true'),
         fetch('/api/admin/customers', { headers }),
         fetch('/api/profile'),
+        fetch('/api/admin/ratings', { headers }),
+        fetch('/api/admin/expenses', { headers }),
       ]);
 
       if (ordersRes.ok) {
@@ -226,32 +407,169 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
       }
       if (menuRes.ok) {
         const mData = await menuRes.json();
-        setMenuItems(mData.items || []);
-        setCategories(mData.categories || []);
+        const incomingItems: MenuItem[] = mData.items || [];
+        const incomingCats: MenuCategory[] = mData.categories || [];
+        setMenuItems((prev) => {
+          if (
+            prev.length === incomingItems.length &&
+            prev.every(
+              (it, i) =>
+                it.id === incomingItems[i]?.id &&
+                it.isAvailable === incomingItems[i]?.isAvailable &&
+                it.price === incomingItems[i]?.price &&
+                it.name === incomingItems[i]?.name &&
+                it.imageUrl === incomingItems[i]?.imageUrl &&
+                it.categoryId === incomingItems[i]?.categoryId
+            )
+          ) {
+            return prev;
+          }
+          return incomingItems;
+        });
+        setCategories((prev) => {
+          if (
+            prev.length === incomingCats.length &&
+            prev.every(
+              (c, i) =>
+                c.id === incomingCats[i]?.id &&
+                c.name === incomingCats[i]?.name &&
+                c.isActive === incomingCats[i]?.isActive
+            )
+          ) {
+            return prev;
+          }
+          return incomingCats;
+        });
       }
       if (settingsRes.ok) {
         const sData = await settingsRes.json();
         setDeliverySettings(sData.deliverySettings);
         setDeliveryAreas(sData.deliveryAreas || []);
+        if (sData.notificationSound) {
+          if (sData.notificationSound.audioData) {
+            setCustomAudio(sData.notificationSound.audioData, sData.notificationSound.name);
+            setCurrentSoundName(sData.notificationSound.name);
+            setHasCustomSound(true);
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem('hm_admin_custom_sound_data', sData.notificationSound.audioData);
+                localStorage.setItem('hm_admin_custom_sound_name', sData.notificationSound.name);
+              } catch (e) {
+                console.warn('localStorage sound sync notice:', e);
+              }
+            }
+          } else {
+            const localData = typeof window !== 'undefined' ? localStorage.getItem('hm_admin_custom_sound_data') : null;
+            if (!localData) {
+              resetCustomAudio();
+              setCurrentSoundName(DEFAULT_SOUND_NAME);
+              setHasCustomSound(false);
+            }
+          }
+        }
       }
       if (customersRes.ok) {
         const cData = await customersRes.json();
-        setCustomers(
-  cData.map((c: any) => ({
-    ...c.user,
-    profile: c.profile,
-    totalOrders: c.ordersCount,
-    totalSpent: c.totalSpent,
-    createdAt: c.user?.createdAt,
-  }))
-);;
+        setCustomers(cData);
+      }
+      if (ratingsRes && ratingsRes.ok) {
+        const rData = await ratingsRes.json();
+        setRatings(Array.isArray(rData) ? rData : []);
       }
       if (profileRes.ok) {
         const pData = await profileRes.json();
         setRestaurantProfile(pData);
       }
+      if (expensesRes && expensesRes.ok) {
+        const expData = await expensesRes.json();
+        setExpenses(Array.isArray(expData) ? expData : []);
+      }
     } catch (err) {
       console.warn('Admin load data notice:', err);
+    }
+  };
+
+  const fetchExpensesOnly = async () => {
+    if (!adminToken) return;
+    try {
+      const res = await fetch('/api/admin/expenses', {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (res.ok) {
+        const expData = await res.json();
+        setExpenses(Array.isArray(expData) ? expData : []);
+      }
+    } catch (err) {
+      console.warn('Expense poll notice:', err);
+    }
+  };
+
+  const handleAddExpenseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminToken) return;
+    const numAmount = parseFloat(expenseForm.amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      alert('Please enter a valid expense amount in ₹ (must be greater than 0)');
+      return;
+    }
+    if (!expenseForm.title.trim()) {
+      alert('Please enter an expense title / description');
+      return;
+    }
+
+    setExpenseSubmitting(true);
+    try {
+      const res = await fetch('/api/admin/expenses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          date: expenseForm.date || getLocalDateString(),
+          title: expenseForm.title.trim(),
+          category: expenseForm.category || 'Kitchen & Groceries',
+          amount: numAmount,
+          notes: expenseForm.notes.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        setExpenseForm({
+          date: getLocalDateString(),
+          title: '',
+          category: 'Kitchen & Groceries',
+          amount: '',
+          notes: '',
+        });
+        setExpenseModalOpen(false);
+        await fetchExpensesOnly();
+      } else {
+        const errData = await res.json();
+        alert(errData.error || 'Failed to record expense');
+      }
+    } catch (err) {
+      alert('Network error while recording expense');
+    } finally {
+      setExpenseSubmitting(false);
+    }
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this expense record?')) return;
+    if (!adminToken) return;
+    try {
+      const res = await fetch(`/api/admin/expenses/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (res.ok) {
+        setExpenses((prev) => prev.filter((ex) => ex.id !== id));
+      } else {
+        alert('Failed to delete expense record');
+      }
+    } catch (err) {
+      alert('Error deleting expense record');
     }
   };
 
@@ -288,51 +606,117 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     }
   };
 
-  // Test sound alert button
-  const handleTestSoundAlert = () => {
-    unlockAudio();
-    playNewOrderChime();
-  };
-    // Admin-only custom sound upload
-  const handleCustomSoundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload custom sound (Step 6)
+  const handleCustomSoundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== 'audio/mpeg' && file.type !== 'audio/mp3') {
-      alert('Please select an MP3 audio file.');
-      e.target.value = '';
+    setSoundUploadError(null);
+
+    // Limit file size to 8MB
+    if (file.size > 8 * 1024 * 1024) {
+      setSoundUploadError('Audio file is too large. Please select an audio file under 8MB.');
       return;
     }
 
-    if (file.size > 4 * 1024 * 1024) {
-      alert('Please choose an MP3 file smaller than 4 MB.');
-      e.target.value = '';
-      return;
-    }
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const audioData = reader.result as string;
+        const soundName = file.name;
 
-    const reader = new FileReader();
+        // Apply immediately to local audio system
+        setCustomAudio(audioData, soundName);
+        setCurrentSoundName(soundName);
+        setHasCustomSound(true);
 
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        saveCustomSound(reader.result, file.name);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('hm_admin_custom_sound_data', audioData);
+            localStorage.setItem('hm_admin_custom_sound_name', soundName);
+          } catch (err) {
+            console.warn('localStorage quota notice for sound:', err);
+          }
+        }
+
+        // Save to backend database if admin token is available
+        if (adminToken) {
+          try {
+            await fetch('/api/admin/sound-settings', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${adminToken}`,
+              },
+              body: JSON.stringify({ name: soundName, audioData }),
+            });
+          } catch (err) {
+            console.warn('Failed to sync sound to server:', err);
+          }
+        }
+
+        // Test play the uploaded sound immediately so admin can verify
         unlockAudio();
+        setIsSoundTesting(true);
         playNewOrderChime();
-        alert(`Custom sound saved: ${file.name}`);
+        setTimeout(() => setIsSoundTesting(false), 2000);
+
+        setSoundSuccessToast(`Custom sound "${soundName}" uploaded and set active!`);
+        setTimeout(() => setSoundSuccessToast(null), 4000);
+      };
+
+      reader.onerror = () => {
+        setSoundUploadError('Failed to read audio file. Please try another file.');
+      };
+
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Sound upload error:', err);
+      setSoundUploadError('Failed to process custom sound file.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  // Reset sound to Hotel Malabar default bell sound
+  const handleResetSoundToDefault = async () => {
+    resetCustomAudio();
+    setCurrentSoundName(DEFAULT_SOUND_NAME);
+    setHasCustomSound(false);
+
+    if (adminToken) {
+      try {
+        await fetch('/api/admin/sound-settings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminToken}`,
+          },
+          body: JSON.stringify({ name: DEFAULT_SOUND_NAME, audioData: null }),
+        });
+      } catch (err) {
+        console.warn('Failed to sync sound reset to server:', err);
       }
-    };
+    }
 
-    reader.onerror = () => {
-      alert('Unable to read the sound file.');
-    };
+    // Play default chime once to confirm
+    unlockAudio();
+    setIsSoundTesting(true);
+    playNewOrderChime();
+    setTimeout(() => setIsSoundTesting(false), 2000);
 
-    reader.readAsDataURL(file);
-    e.target.value = '';
+    setSoundSuccessToast('Reset to Hotel Malabar default 3-strike bell chime.');
+    setTimeout(() => setSoundSuccessToast(null), 4000);
   };
 
-  const handleResetCustomSound = () => {
-    resetCustomSound();
-    alert('Default Hotel Malabar sound restored.');
+  // Test sound alert button
+  const handleTestSoundAlert = () => {
+    unlockAudio();
+    setIsSoundTesting(true);
+    playNewOrderChime();
+    setTimeout(() => setIsSoundTesting(false), 2000);
   };
+
   // Toggle repeat sound reminder
   const handleToggleRepeatSound = () => {
     const next = !repeatSoundUntilAccepted;
@@ -349,7 +733,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
 
     const reminderInterval = setInterval(() => {
       if (repeatSoundRef.current && soundEnabledRef.current) {
-        const hasUnacceptedOrders = orders.some((o) => o.status === 'Order Placed');
+        const hasUnacceptedOrders = ordersRef.current.some(
+          (o) => isPendingNewOrder(o) && isOrderToday(o.createdAt)
+        );
         if (hasUnacceptedOrders) {
           unlockAudio();
           playNewOrderChime(0.6);
@@ -358,10 +744,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     }, 20000);
 
     return () => clearInterval(reminderInterval);
-  }, [isAdminLoggedIn, orders]);
+  }, [isAdminLoggedIn]);
 
   const handleOrdersUpdate = (newOrders: Order[]) => {
-    setOrders(newOrders);
+    setOrders((prev) => {
+      if (
+        prev.length === newOrders.length &&
+        prev.every(
+          (o, idx) =>
+            o.id === newOrders[idx]?.id &&
+            o.status === newOrders[idx]?.status &&
+            o.estimatedReadyAt === newOrders[idx]?.estimatedReadyAt &&
+            o.preparationMinutes === newOrders[idx]?.preparationMinutes &&
+            o.updatedAt === newOrders[idx]?.updatedAt
+        )
+      ) {
+        return prev;
+      }
+      return newOrders;
+    });
 
     const currentIds = new Set(newOrders.map((o) => o.id));
 
@@ -372,9 +773,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
       return;
     }
 
-    // Detect genuine newly received orders (status: Order Placed and not previously seen)
+    // Detect genuine newly received orders (pending status, created today, and not previously seen)
     const brandNewPlacedOrders = newOrders.filter(
-      (o) => o.status === 'Order Placed' && !knownOrderIdsRef.current.has(o.id)
+      (o) => isPendingNewOrder(o) && isOrderToday(o.createdAt) && !knownOrderIdsRef.current.has(o.id)
     );
 
     if (brandNewPlacedOrders.length > 0) {
@@ -408,15 +809,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
+    setAuthSuccessMessage(null);
 
     const cleanPhone = adminPhone.trim();
+    const cleanPassword = adminPassword.trim();
+
     if (!cleanPhone) {
-      setLoginError('Please enter an authorized admin phone number.');
+      setLoginError('Please enter your admin phone number.');
       return;
     }
 
-    if (!['9567562071', '8904634717', '9538950224'].includes(cleanPhone)) {
-      setLoginError('Unauthorized Admin Number');
+    if (!cleanPassword) {
+      setLoginError('Please enter your admin password.');
       return;
     }
 
@@ -425,15 +829,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     try {
       const res = await fetch('/api/admin/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
         body: JSON.stringify({
           phone: cleanPhone,
+          password: cleanPassword,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Unauthorized Admin Number');
+        throw new Error(data.error || 'Invalid admin credentials');
       }
 
       localStorage.setItem('hm_admin_token', data.token);
@@ -443,7 +851,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
         window.history.pushState({}, '', '/admin');
       }
     } catch (err: any) {
-      setLoginError(err.message || 'Unauthorized Admin Number');
+      setLoginError(err.message || 'Invalid admin phone number or password.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleSetAdminPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    setAuthSuccessMessage(null);
+
+    const cleanPhone = adminPhone.trim();
+    const cleanPassword = adminPassword.trim();
+    const cleanConfirm = confirmPassword.trim();
+
+    if (!cleanPhone) {
+      setLoginError('Please enter your admin phone number.');
+      return;
+    }
+
+    const cleanDigits = cleanPhone.replace(/\D/g, '');
+    if (cleanDigits.length < 10) {
+      setLoginError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    if (!cleanPassword) {
+      setLoginError('Please enter a new admin password.');
+      return;
+    }
+
+    if (cleanPassword.length < 8) {
+      setLoginError('Admin password must be at least 8 characters long.');
+      return;
+    }
+
+    if (cleanPassword !== cleanConfirm) {
+      setLoginError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setLoginLoading(true);
+
+    try {
+      const res = await fetch('/api/admin/set-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          phone: cleanPhone,
+          password: cleanPassword,
+          confirmPassword: cleanConfirm,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to set admin password.');
+      }
+
+      setIsAdminConfigured(true);
+      setAdminAuthMode('login');
+      localStorage.setItem('hm_admin_token', data.token);
+      setAdminToken(data.token);
+      setIsAdminLoggedIn(true);
+      if (typeof window !== 'undefined') {
+        window.history.pushState({}, '', '/admin');
+      }
+    } catch (err: any) {
+      setLoginError(err.message || 'Failed to set admin password.');
     } finally {
       setLoginLoading(false);
     }
@@ -508,10 +987,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     const finalMins = prepTime && !isNaN(prepTime) && prepTime > 0 ? prepTime : 15;
 
     try {
-      const isNew = prepTimeModalOrder.status === 'Order Placed';
+      const isNew = isPendingNewOrder(prepTimeModalOrder);
+      const targetId = prepTimeModalOrder.id;
       const endpoint = isNew
-        ? `/api/admin/orders/${prepTimeModalOrder.id}/status`
-        : `/api/admin/orders/${prepTimeModalOrder.id}/prep-time`;
+        ? `/api/admin/orders/${targetId}/status`
+        : `/api/admin/orders/${targetId}/prep-time`;
 
       const payload = isNew
         ? {
@@ -533,6 +1013,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
       });
 
       if (res.ok) {
+        // Optimistically update local order state immediately so it moves to ACCEPTED without delay
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === targetId
+              ? {
+                  ...o,
+                  status: isNew ? 'Accepted' : o.status,
+                  estimatedPrepTimeMinutes: finalMins,
+                  preparationMinutes: finalMins,
+                  acceptedAt: isNew ? new Date().toISOString() : o.acceptedAt,
+                  updatedAt: new Date().toISOString(),
+                }
+              : o
+          )
+        );
         setPrepTimeModalOrder(null);
         fetchOrdersOnly();
       }
@@ -565,6 +1060,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
         body: JSON.stringify(payload),
       });
       if (res.ok) {
+        // Optimistically update order status immediately so it moves to REJECTED or target status
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  status: newStatus,
+                  rejectionReason: payload.rejectionReason || o.rejectionReason,
+                  updatedAt: new Date().toISOString(),
+                }
+              : o
+          )
+        );
         fetchOrdersOnly();
       }
     } catch (err) {
@@ -644,36 +1152,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     });
   };
 
-  // Menu Image Upload with automated watermark baking
+  // Menu Image Upload / Camera Capture with automated watermark baking and reliable fallback
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
       setImageUploading(true);
-      // Automatically bakes "This is made by INSTA ID @thee.juuu" onto canvas!
-      const watermarkedBase64 = await applyWatermarkToImageFile(file);
-      setItemForm((prev) => ({ ...prev, imageUrl: watermarkedBase64 }));
+      setItemSaveError(null);
+      // Try automated watermark baking
+      try {
+        const watermarkedBase64 = await applyWatermarkToImageFile(file);
+        setItemForm((prev) => ({ ...prev, imageUrl: watermarkedBase64 }));
+      } catch (watermarkErr) {
+        console.warn('Canvas watermark fallback:', watermarkErr);
+        // Fallback: Read photo directly via FileReader so it never fails
+        const reader = new FileReader();
+        reader.onload = () => {
+          setItemForm((prev) => ({ ...prev, imageUrl: (reader.result as string) || '' }));
+        };
+        reader.readAsDataURL(file);
+      }
     } catch (err) {
-      alert('Failed to apply watermark to uploaded photo. Please try again.');
+      console.error('Photo processing error:', err);
     } finally {
       setImageUploading(false);
+      e.target.value = '';
     }
   };
 
   const handleSaveMenuItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adminToken) return;
+    setItemSaveError(null);
+
+    const token = adminToken || (typeof window !== 'undefined' ? localStorage.getItem('hm_admin_token') : null);
+    if (!token) {
+      const msg = 'Admin session expired or missing. Please log in again.';
+      setItemSaveError(msg);
+      alert(msg);
+      return;
+    }
+    if (!adminToken) {
+      setAdminToken(token);
+    }
+
+    const trimmedName = itemForm.name.trim();
+    if (!trimmedName) {
+      const msg = 'Please enter an item name.';
+      setItemSaveError(msg);
+      return;
+    }
+
+    const parsedPrice = parseFloat(itemForm.price);
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      const msg = 'Please enter a valid price greater than ₹0.';
+      setItemSaveError(msg);
+      return;
+    }
+
+    const resolvedCatId = itemForm.categoryId || categories[0]?.id || 'cat_breakfast';
+
+    setIsSavingItem(true);
 
     try {
       const payload = {
-        name: itemForm.name.trim(),
-        categoryId: itemForm.categoryId || categories[0]?.id,
-        price: parseFloat(itemForm.price),
+        name: trimmedName,
+        categoryId: resolvedCatId,
+        price: parsedPrice,
         description: itemForm.description.trim(),
-        imageUrl: itemForm.imageUrl,
-        isVeg: itemForm.isVeg,
-        isAvailable: itemForm.isAvailable,
+        imageUrl: itemForm.imageUrl?.trim() || '',
+        isVeg: Boolean(itemForm.isVeg),
+        isAvailable: Boolean(itemForm.isAvailable),
         prepTimeMinutes: parseInt(itemForm.prepTimeMinutes, 10) || 10,
       };
 
@@ -686,18 +1235,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
         method,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminToken}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
 
+      const data = await res.json().catch(() => ({}));
+
       if (res.ok) {
+        const savedItem: MenuItem = data.item;
+        if (savedItem) {
+          setMenuItems((prev) => {
+            if (editingItem) {
+              return prev.map((it) => (it.id === savedItem.id ? savedItem : it));
+            } else {
+              const remaining = prev.filter((it) => it.id !== savedItem.id);
+              return [savedItem, ...remaining];
+            }
+          });
+        }
+
         setItemModalOpen(false);
         setEditingItem(null);
+        setItemSaveError(null);
+
+        // Fetch fresh menu immediately with cache-busting to ensure database consistency
+        try {
+          const freshRes = await fetch(`/api/menu?_t=${Date.now()}`);
+          if (freshRes.ok) {
+            const freshData = await freshRes.json();
+            if (Array.isArray(freshData.items)) {
+              setMenuItems(freshData.items);
+            }
+            if (Array.isArray(freshData.categories)) {
+              setCategories(freshData.categories);
+            }
+          }
+        } catch (fetchErr) {
+          console.error('Menu refresh error:', fetchErr);
+        }
+
+        // Also trigger full admin data sync
         fetchAllAdminData();
+      } else {
+        const errorMsg = data.error || 'Failed to save menu item. Please check the fields and try again.';
+        setItemSaveError(errorMsg);
+        alert(errorMsg);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save menu item:', err);
+      const errorMsg = err.message || 'Network error while saving item. Please try again.';
+      setItemSaveError(errorMsg);
+      alert(errorMsg);
+    } finally {
+      setIsSavingItem(false);
     }
   };
 
@@ -716,24 +1307,141 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     }
   };
 
-  const handleToggleItemAvailability = async (item: MenuItem) => {
+  const handleSetItemAvailability = async (item: MenuItem, newStatus: boolean) => {
     if (!adminToken) return;
+    if (item.isAvailable === newStatus) return;
+
+    setUpdatingAvailabilityItemId(item.id);
+    // Optimistic UI update
+    setMenuItems((prev) =>
+      prev.map((m) => (m.id === item.id ? { ...m, isAvailable: newStatus } : m))
+    );
+
     try {
-      await fetch(`/api/admin/menu/items/${item.id}`, {
-        method: 'PUT',
+      const res = await fetch(`/api/admin/menu/items/${item.id}/availability`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${adminToken}`,
         },
-        body: JSON.stringify({ isAvailable: !item.isAvailable }),
+        body: JSON.stringify({ isAvailable: newStatus }),
       });
+
+      if (!res.ok) {
+        // Fallback to PUT
+        await fetch(`/api/admin/menu/items/${item.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminToken}`,
+          },
+          body: JSON.stringify({ isAvailable: newStatus }),
+        });
+      }
+
+      setAvailabilityToast({
+        itemName: item.name,
+        isAvailable: newStatus,
+        timestamp: Date.now(),
+      });
+      setTimeout(() => {
+        setAvailabilityToast((curr) =>
+          curr && Date.now() - curr.timestamp >= 4000 ? null : curr
+        );
+      }, 4000);
+
       fetchAllAdminData();
     } catch (err) {
-      console.error('Failed to toggle availability:', err);
+      console.error('Failed to update availability:', err);
+      // Revert on error
+      setMenuItems((prev) =>
+        prev.map((m) => (m.id === item.id ? { ...m, isAvailable: item.isAvailable } : m))
+      );
+    } finally {
+      setUpdatingAvailabilityItemId(null);
     }
   };
 
-  const [quickPhotoLoadingId, setQuickPhotoLoadingId] = useState<string | null>(null);
+  const handleToggleItemAvailability = (item: MenuItem) => {
+    handleSetItemAvailability(item, !item.isAvailable);
+  };
+
+  const handleToggleOrderItemSelection = (orderId: string, itemId: string) => {
+    setSelectedOutOfStockByOrder((prev) => {
+      const current = prev[orderId] || [];
+      const exists = current.includes(itemId);
+      const updated = exists ? current.filter((id) => id !== itemId) : [...current, itemId];
+      return { ...prev, [orderId]: updated };
+    });
+  };
+
+  const handleMarkSelectedOutOfStock = async (orderId: string) => {
+    if (!adminToken) return;
+    const selectedIds = selectedOutOfStockByOrder[orderId] || [];
+    if (selectedIds.length === 0) return;
+
+    setMarkingOutOfStockOrderId(orderId);
+
+    // Optimistically update menu items state
+    setMenuItems((prev) =>
+      prev.map((m) => (selectedIds.includes(m.id) ? { ...m, isAvailable: false } : m))
+    );
+
+    try {
+      const res = await fetch('/api/admin/menu/items/batch-availability', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ itemIds: selectedIds, isAvailable: false }),
+      });
+
+      if (!res.ok) {
+        // Fallback to individual calls if needed
+        await Promise.all(
+          selectedIds.map((id) =>
+            fetch(`/api/admin/menu/items/${id}/availability`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${adminToken}`,
+              },
+              body: JSON.stringify({ isAvailable: false }),
+            })
+          )
+        );
+      }
+
+      // Names of the items marked out of stock
+      const affectedNames = menuItems
+        .filter((m) => selectedIds.includes(m.id))
+        .map((m) => m.name);
+      const namesString =
+        affectedNames.length > 0 ? affectedNames.join(', ') : `${selectedIds.length} item(s)`;
+
+      setAvailabilityToast({
+        itemName: namesString,
+        isAvailable: false,
+        timestamp: Date.now(),
+      });
+      setTimeout(() => {
+        setAvailabilityToast((curr) =>
+          curr && Date.now() - curr.timestamp >= 4000 ? null : curr
+        );
+      }, 4000);
+
+      // Clear selection for this order
+      setSelectedOutOfStockByOrder((prev) => ({ ...prev, [orderId]: [] }));
+
+      // Refresh admin data to ensure synchronization
+      fetchAllAdminData();
+    } catch (err) {
+      console.error('Failed to mark selected items out of stock:', err);
+    } finally {
+      setMarkingOutOfStockOrderId(null);
+    }
+  };
 
   const handleMoveMenuItem = async (id: string, direction: 'up' | 'down') => {
     if (!adminToken) return;
@@ -755,23 +1463,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   };
 
   const handleQuickPhotoReplace = async (item: MenuItem, file: File) => {
-    if (!adminToken || !file) return;
+    const token = adminToken || (typeof window !== 'undefined' ? localStorage.getItem('hm_admin_token') : null);
+    if (!token || !file) return;
     try {
       setQuickPhotoLoadingId(item.id);
-      const watermarkedBase64 = await applyWatermarkToImageFile(file);
+      let photoData = '';
+      try {
+        photoData = await applyWatermarkToImageFile(file);
+      } catch (watermarkErr) {
+        console.warn('Quick photo watermark fallback:', watermarkErr);
+        photoData = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string) || '');
+          reader.readAsDataURL(file);
+        });
+      }
       const res = await fetch(`/api/admin/menu/items/${item.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminToken}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ imageUrl: watermarkedBase64 }),
+        body: JSON.stringify({ imageUrl: photoData }),
       });
       if (res.ok) {
         fetchAllAdminData();
       }
     } catch (err) {
-      alert('Failed to update photo with watermark. Please try another image.');
+      console.error('Failed to update photo:', err);
     } finally {
       setQuickPhotoLoadingId(null);
     }
@@ -800,6 +1519,101 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     }
   };
 
+  // Calculate counts for badges and filters (CURRENT CALENDAR DAY ONLY for Today's operational dashboard)
+  const newOrdersCount = orders.filter(
+    (o) => isPendingNewOrder(o) && isOrderToday(o.createdAt, currentCalendarDate)
+  ).length;
+  const acceptedOrdersCount = orders.filter(
+    (o) => isAcceptedOrder(o) && isOrderToday(o.createdAt, currentCalendarDate)
+  ).length;
+  const todayValidOrdersCount = orders.filter(
+    (o) => isValidOrder(o) && isOrderToday(o.createdAt, currentCalendarDate)
+  ).length;
+  const todayOrdersCount = orders.filter(
+    (o) => isOrderToday(o.createdAt, currentCalendarDate)
+  ).length;
+  const rejectedOrdersCount = orders.filter(
+    (o) => isRejectedOrder(o) && isOrderToday(o.createdAt, currentCalendarDate)
+  ).length;
+
+  // Group all orders by local date with attached expenses & valid sales metrics
+  const dateGroups = useMemo(() => {
+    return groupOrdersByDate(orders, expenses, currentCalendarDate);
+  }, [orders, expenses, currentCalendarDate]);
+
+  // Selected date group for detailed date drill-down
+  const selectedDateGroup = useMemo(() => {
+    if (historyDateFilter === 'all') return null;
+    return dateGroups.find((g) => g.dateYMD === historyDateFilter) || null;
+  }, [dateGroups, historyDateFilter]);
+
+  const filteredOrders = useMemo(() => {
+    // Sort all orders newest first
+    const sorted = [...orders].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    if (orderFilter === 'new') {
+      // 1. NEW ORDERS:
+      // Show ONLY genuinely new orders from the current calendar day waiting for admin action.
+      // An old order from yesterday must NEVER appear as a new order today.
+      return sorted.filter((o) => isPendingNewOrder(o) && isOrderToday(o.createdAt, currentCalendarDate));
+    }
+
+    if (orderFilter === 'accepted' || orderFilter === 'active') {
+      // 2. ACCEPTED ORDERS:
+      // Show only currently relevant accepted orders from the current calendar day.
+      // Yesterday's completed/old orders must not stay visible on the current-day dashboard.
+      // Old orders should be accessed through ORDER HISTORY.
+      return sorted.filter((o) => isAcceptedOrder(o) && isOrderToday(o.createdAt, currentCalendarDate));
+    }
+
+    if (orderFilter === 'today') {
+      // 3. TODAY'S ORDERS:
+      // Shows ONLY valid orders from the CURRENT CALENDAR DATE (strictly matching Today's Total Orders).
+      // Orders from previous dates appear exclusively in ORDER HISTORY.
+      // At midnight (IST), automatically resets to 0.
+      return sorted.filter((o) => isValidOrder(o) && isOrderToday(o.createdAt, currentCalendarDate));
+    }
+
+    if (orderFilter === 'completed') {
+      return sorted.filter(
+        (o) => (o.status || '').toLowerCase() === 'delivered' && isOrderToday(o.createdAt, currentCalendarDate)
+      );
+    }
+
+    if (orderFilter === 'rejected') {
+      // 4. REJECTED ORDERS:
+      // Show only current day's rejected orders.
+      return sorted.filter((o) => isRejectedOrder(o) && isOrderToday(o.createdAt, currentCalendarDate));
+    }
+
+    if (orderFilter === 'history') {
+      // 5. DATE-WISE ORDER HISTORY:
+      // All previous-day orders remain safely stored in the existing database.
+      // They are visible only when Admin opens ORDER HISTORY.
+      return sorted.filter((o) => {
+        if (historyDateFilter !== 'all') {
+          if (!isOrderFromDate(o.createdAt, historyDateFilter)) {
+            return false;
+          }
+        }
+        if (historySearchQuery.trim()) {
+          const q = historySearchQuery.toLowerCase().trim();
+          const matchNumber = (o.orderNumber || '').toLowerCase().includes(q);
+          const matchName = (o.customerName || '').toLowerCase().includes(q);
+          const matchPhone = (o.customerPhone || '').toLowerCase().includes(q);
+          const matchArea = (o.deliveryArea || '').toLowerCase().includes(q);
+          if (!matchNumber && !matchName && !matchPhone && !matchArea) return false;
+        }
+        return true;
+      });
+    }
+
+    // Default 'all': strictly current calendar day only so previous days NEVER mix with today
+    return sorted.filter((o) => isOrderToday(o.createdAt, currentCalendarDate));
+  }, [orders, orderFilter, historyDateFilter, historySearchQuery, currentCalendarDate]);
+
   // ==========================================
   // RENDER LOGIN IF NOT AUTHENTICATED
   // ==========================================
@@ -809,48 +1623,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
         <div className="w-full max-w-md bg-[#0f2d1c] border-2 border-[#cba135] rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
           <div className="text-center space-y-2">
             <div className="w-16 h-16 bg-[#164027] border border-[#dfb64c] rounded-2xl mx-auto flex items-center justify-center text-[#dfb64c] shadow-lg">
-              <ShieldCheck className="w-8 h-8" />
+              {adminAuthMode === 'login' ? (
+                <ShieldCheck className="w-8 h-8" />
+              ) : (
+                <KeyRound className="w-8 h-8" />
+              )}
             </div>
             <h1 className="font-brand text-2xl sm:text-3xl font-bold text-[#fcfaf6]">
-              Private Admin Portal
+              {adminAuthMode === 'login' ? 'Private Admin Portal' : 'Set Admin Password'}
             </h1>
             <p className="text-xs text-[#9bb5a4]">
-              Hotel Malabar Kitchen, Menu & Delivery Control Terminal
+              {adminAuthMode === 'login'
+                ? 'Hotel Malabar Kitchen, Menu & Delivery Control Terminal'
+                : 'Configure your administrator phone number and master password'}
             </p>
           </div>
 
-          {/* Authorized Numbers Notice */}
-          <div className="bg-[#123620] border border-[#245937] rounded-2xl p-3.5 space-y-2 text-xs">
-            <div className="flex items-center justify-between text-[#dfb64c] font-semibold text-[11px]">
-              <span>Authorized Admin Numbers</span>
-              <span className="bg-[#091a10] px-2 py-0.5 rounded text-[10px] text-emerald-400 font-bold">No OTP</span>
+          {/* Mode Switcher: ONLY visible when admin account has NEVER been configured */}
+          {isAdminConfigured === false && (
+            <div className="grid grid-cols-2 gap-2 p-1 bg-[#123620] border border-[#245937] rounded-2xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminAuthMode('login');
+                  setLoginError(null);
+                  setAuthSuccessMessage(null);
+                }}
+                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                  adminAuthMode === 'login'
+                    ? 'bg-gradient-to-r from-[#dfb64c] to-[#cba135] text-[#0a1f13] shadow'
+                    : 'text-[#c9dcce] hover:text-[#fcfaf6]'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminAuthMode('setPassword');
+                  setLoginError(null);
+                  setAuthSuccessMessage(null);
+                }}
+                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                  adminAuthMode === 'setPassword'
+                    ? 'bg-gradient-to-r from-[#dfb64c] to-[#cba135] text-[#0a1f13] shadow'
+                    : 'text-[#c9dcce] hover:text-[#fcfaf6]'
+                }`}
+              >
+                Set Admin Password
+              </button>
             </div>
-            <p className="text-[11px] text-[#8ea896] leading-relaxed">
-              Administrative access is strictly restricted to designated phone accounts:
-            </p>
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {['9567562071', '8904634717', '9538950224'].map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => {
-                    setAdminPhone(num);
-                    setLoginError(null);
-                  }}
-                  className={`text-[11px] font-mono px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                    adminPhone === num
-                      ? 'bg-[#dfb64c] text-[#0a1f13] border-[#dfb64c] font-bold shadow'
-                      : 'bg-[#0b2114] text-[#c9dcce] border-[#1d4c2e] hover:border-[#dfb64c]'
-                  }`}
-                >
-                  {num}
-                </button>
-              ))}
-            </div>
-            <p className="text-[10px] text-[#8ea896] pt-0.5 italic">
-              Click a number above to autofill, or enter directly below.
-            </p>
-          </div>
+          )}
 
           {loginError && (
             <div className="p-3 rounded-xl bg-red-950/90 border border-red-800 text-red-200 text-xs flex items-center gap-2">
@@ -859,42 +1682,195 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
             </div>
           )}
 
-          <form onSubmit={handleAdminLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-[#c9dcce] mb-1">
-                Authorized Admin Phone Number
-              </label>
-              <input
-                type="tel"
-                required
-                value={adminPhone}
-                onChange={(e) => {
-                  setAdminPhone(e.target.value);
-                  setLoginError(null);
-                }}
-                placeholder="e.g. 9567562071"
-                className="w-full bg-[#123620] border border-[#245937] rounded-xl px-3.5 py-2.5 text-sm text-[#fcfaf6] font-mono focus:outline-none focus:border-[#dfb64c]"
-              />
+          {authSuccessMessage && (
+            <div className="p-3 rounded-xl bg-emerald-950/90 border border-emerald-800 text-emerald-200 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{authSuccessMessage}</span>
             </div>
+          )}
 
-            <button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full bg-gradient-to-r from-[#dfb64c] to-[#cba135] hover:from-[#e7c35d] text-[#0a1f13] font-bold py-3.5 rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50 mt-2 flex items-center justify-center gap-2 text-sm"
-            >
-              {loginLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Verifying Admin Phone...</span>
-                </>
-              ) : (
-                <>
-                  <Lock className="w-4 h-4" />
-                  <span>Sign In as Admin</span>
-                </>
-              )}
-            </button>
-          </form>
+          {adminAuthMode === 'login' || isAdminConfigured === true ? (
+            <form onSubmit={handleAdminLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#c9dcce] mb-1">
+                  Admin Phone Number
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3.5 top-3.5 text-[#799983]" />
+                  <input
+                    type="tel"
+                    required
+                    value={adminPhone}
+                    onChange={(e) => {
+                      setAdminPhone(e.target.value);
+                      setLoginError(null);
+                    }}
+                    placeholder="Enter admin phone number"
+                    className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-[#fcfaf6] font-mono focus:outline-none focus:border-[#dfb64c]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-[#c9dcce]">
+                    Admin Password
+                  </label>
+                  {isAdminConfigured === false && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminAuthMode('setPassword');
+                        setLoginError(null);
+                        setAuthSuccessMessage(null);
+                      }}
+                      className="text-[11px] text-[#dfb64c] hover:underline cursor-pointer"
+                    >
+                      Set Admin Password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3.5 top-3.5 text-[#799983]" />
+                  <input
+                    type={showAdminPassword ? 'text' : 'password'}
+                    required
+                    value={adminPassword}
+                    onChange={(e) => {
+                      setAdminPassword(e.target.value);
+                      setLoginError(null);
+                    }}
+                    placeholder="Enter admin password"
+                    className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-10 pr-10 py-2.5 text-sm text-[#fcfaf6] focus:outline-none focus:border-[#dfb64c]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPassword(!showAdminPassword)}
+                    className="absolute right-3.5 top-3 text-[#799983] hover:text-[#fcfaf6] cursor-pointer"
+                    aria-label={showAdminPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="w-full bg-gradient-to-r from-[#dfb64c] to-[#cba135] hover:from-[#e7c35d] text-[#0a1f13] font-bold py-3.5 rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50 mt-2 flex items-center justify-center gap-2 text-sm"
+              >
+                {loginLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Verifying Credentials...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4" />
+                    <span>Sign In as Admin</span>
+                  </>
+                )}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleSetAdminPassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#c9dcce] mb-1">
+                  Admin Phone Number
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3.5 top-3.5 text-[#799983]" />
+                  <input
+                    type="tel"
+                    required
+                    value={adminPhone}
+                    onChange={(e) => {
+                      setAdminPhone(e.target.value);
+                      setLoginError(null);
+                    }}
+                    placeholder="e.g. 10-digit mobile number"
+                    className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-[#fcfaf6] font-mono focus:outline-none focus:border-[#dfb64c]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#c9dcce] mb-1">
+                  New Admin Password (Min 8 Characters)
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3.5 top-3.5 text-[#799983]" />
+                  <input
+                    type={showAdminPassword ? 'text' : 'password'}
+                    required
+                    minLength={8}
+                    value={adminPassword}
+                    onChange={(e) => {
+                      setAdminPassword(e.target.value);
+                      setLoginError(null);
+                    }}
+                    placeholder="At least 8 characters"
+                    className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-10 pr-10 py-2.5 text-sm text-[#fcfaf6] focus:outline-none focus:border-[#dfb64c]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPassword(!showAdminPassword)}
+                    className="absolute right-3.5 top-3 text-[#799983] hover:text-[#fcfaf6] cursor-pointer"
+                    aria-label={showAdminPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#c9dcce] mb-1">
+                  Confirm Admin Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3.5 top-3.5 text-[#799983]" />
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    minLength={8}
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      setLoginError(null);
+                    }}
+                    placeholder="Re-enter new admin password"
+                    className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-10 pr-10 py-2.5 text-sm text-[#fcfaf6] focus:outline-none focus:border-[#dfb64c]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3.5 top-3 text-[#799983] hover:text-[#fcfaf6] cursor-pointer"
+                    aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="w-full bg-gradient-to-r from-[#dfb64c] to-[#cba135] hover:from-[#e7c35d] text-[#0a1f13] font-bold py-3.5 rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50 mt-2 flex items-center justify-center gap-2 text-sm"
+              >
+                {loginLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Saving Admin Password...</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-4 h-4" />
+                    <span>Set Password & Login</span>
+                  </>
+                )}
+              </button>
+            </form>
+          )}
 
           <div className="pt-2 text-center">
             <button
@@ -910,19 +1886,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
       </div>
     );
   }
-
-  // Calculate filtered orders
-  const newOrdersCount = orders.filter((o) => o.status === 'Order Placed').length;
-
-  const filteredOrders = orders.filter((order) => {
-    if (orderFilter === 'new') return order.status === 'Order Placed';
-    if (orderFilter === 'active') {
-      return ['Accepted', 'Preparing', 'Ready', 'Out for Delivery'].includes(order.status);
-    }
-    if (orderFilter === 'completed') return order.status === 'Delivered';
-    if (orderFilter === 'rejected') return order.status === 'Order Rejected';
-    return true;
-  });
 
   return (
     <div className="min-h-screen bg-[#0a1f13] text-[#fcfaf6] flex flex-col font-sans">
@@ -1088,12 +2051,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
         {/* Mobile Horizontal Quick Navigation Strip (visible on mobile only) */}
         <div className="lg:hidden flex items-center gap-1.5 px-3 py-2 overflow-x-auto border-t border-[#1a442b] bg-[#0c2417]">
           {[
-            { id: 'orders', label: 'Orders', icon: Bell, count: newOrdersCount > 0 ? `${newOrdersCount} New` : orders.length },
+            { id: 'orders', label: 'Orders', icon: Bell, count: newOrdersCount > 0 ? `${newOrdersCount} New` : todayValidOrdersCount > 0 ? `${todayValidOrdersCount} Today` : orders.length },
             { id: 'menu', label: 'Food Menu', icon: Utensils, count: menuItems.length },
             { id: 'categories', label: 'Categories', icon: Layers, count: categories.length },
             { id: 'profile', label: 'Profile & Logo', icon: Building },
             { id: 'delivery', label: 'Delivery', icon: Truck, count: deliveryAreas.length },
             { id: 'customers', label: 'Customers', icon: Users, count: customers.length },
+            { id: 'ratings', label: 'Ratings', icon: Star, count: ratings.length },
+            { id: 'settings', label: 'Admin Settings', icon: Sliders, count: hasCustomSound ? 'Custom Sound' : 'Default' },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -1180,7 +2145,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                   label: 'Orders & Kitchen',
                   description: 'Accept/Reject, status, GPS, KOT print',
                   icon: Bell,
-                  badge: newOrdersCount > 0 ? `${newOrdersCount} New` : `${orders.length} total`,
+                  badge: newOrdersCount > 0 ? `${newOrdersCount} New` : todayValidOrdersCount > 0 ? `${todayValidOrdersCount} Today` : `${orders.length} total`,
                   badgeColor: newOrdersCount > 0 ? 'bg-red-600 text-white animate-pulse' : 'bg-[#18482b] text-[#c9dcce]',
                 },
                 {
@@ -1222,6 +2187,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                   icon: Users,
                   badge: `${customers.length} users`,
                   badgeColor: 'bg-[#18482b] text-[#c9dcce]',
+                },
+                {
+                  id: 'ratings',
+                  label: 'Ratings & Reviews',
+                  description: 'Customer 1-5 star ratings & food feedback',
+                  icon: Star,
+                  badge: `${ratings.length} reviews`,
+                  badgeColor: 'bg-amber-950 text-amber-300 border border-amber-600/50',
+                },
+                {
+                  id: 'settings',
+                  label: 'Admin Settings',
+                  description: 'Custom order notification sound & alerts',
+                  icon: Sliders,
+                  badge: hasCustomSound ? 'Custom Sound' : 'Default Sound',
+                  badgeColor: hasCustomSound ? 'bg-amber-950 text-amber-300 border border-amber-600' : 'bg-[#18482b] text-[#c9dcce]',
                 },
               ].map((item) => {
                 const Icon = item.icon;
@@ -1376,67 +2357,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                     className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                       soundEnabled
                         ? 'bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-600'
-                        : 'bg-emerald-600 hover:bg-emerald-500 text-[#091a10] border border-emerald-400 shadow-md font-extrabold'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-[#091a10] border border-emerald-400 shadow-md font-extrabold ring-2 ring-emerald-400/50'
                     }`}
                   >
                     {soundEnabled ? (
                       <>
                         <VolumeX className="w-4 h-4 text-red-400" />
-                        <span>Mute Sound</span>
+                        <span>Mute Kitchen Sound</span>
                       </>
                     ) : (
                       <>
                         <Volume2 className="w-4 h-4 text-[#091a10]" />
-                        <span>Unmute Sound</span>
+                        <span>Enable Kitchen Sound</span>
                       </>
                     )}
                   </button>
 
                   <button
                     onClick={handleTestSoundAlert}
-                    className="bg-[#123620] hover:bg-[#184428] border border-[#dfb64c]/60 text-[#dfb64c] hover:text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                    title="Play restaurant kitchen bell alert chime now"
+                    className={`border px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      isSoundTesting
+                        ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-2 ring-amber-400/40'
+                        : 'bg-[#123620] hover:bg-[#184428] border-[#dfb64c]/60 text-[#dfb64c] hover:text-white'
+                    }`}
+                    title="Play order notification sound now"
                   >
-                    <Bell className="w-4 h-4 text-[#dfb64c]" />
-                    <span>Test Chime</span>
+                    <Bell className={`w-4 h-4 ${isSoundTesting ? 'text-amber-400 animate-bounce' : 'text-[#dfb64c]'}`} />
+                    <span>{isSoundTesting ? 'Playing Sound...' : 'Test Sound'}</span>
                   </button>
-                              {/* Admin-only Custom Sound Controls */}
-            <label
-              className="p-1.5 sm:px-2 sm:py-1.5 rounded-xl border border-[#245937] bg-[#123620] hover:bg-[#184428] text-stone-300 hover:text-[#dfb64c] text-xs flex items-center gap-1 transition-all cursor-pointer"
-              title="Upload a custom Hotel Malabar order notification MP3"
-            >
-              <Upload className="w-3.5 h-3.5 text-[#dfb64c]" />
-              <span className="hidden lg:inline text-[11px]">Custom Sound</span>
-              <input
-                type="file"
-                accept=".mp3,audio/mpeg,audio/mp3"
-                className="hidden"
-                onChange={handleCustomSoundUpload}
-              />
-            </label>
-
-            <button
-              type="button"
-              onClick={() => {
-                unlockAudio();
-                playNewOrderChime();
-              }}
-              className="p-1.5 sm:px-2 sm:py-1.5 rounded-xl border border-emerald-500/50 bg-[#123620] hover:bg-[#184428] text-emerald-300 text-xs flex items-center gap-1 transition-all cursor-pointer"
-              title="Test the currently selected custom Hotel Malabar sound"
-            >
-              <Bell className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline text-[11px]">Test Custom</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleResetCustomSound}
-              className="p-1.5 sm:px-2 sm:py-1.5 rounded-xl border border-stone-600 bg-[#123620] hover:bg-[#184428] text-stone-300 text-xs flex items-center gap-1 transition-all cursor-pointer"
-              title="Restore the default Hotel Malabar sound"
-            >
-              <span className="hidden lg:inline text-[11px]">Default Sound</span>
-              <span className="lg:hidden text-[10px]">Default</span>
-            </button>
 
                   <button
                     onClick={handleToggleRepeatSound}
@@ -1452,6 +2400,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                   </button>
                 </div>
               </div>
+
+              {/* CUSTOM SOUND CONTROLS & CURRENT SOUND DISPLAY */}
+              <div className="mt-3 pt-3 border-t border-[#1d462b] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[#8ea896] shrink-0 font-medium">Active Sound:</span>
+                  <span className="font-bold text-[#dfb64c] truncate font-mono text-[11px] sm:text-xs" title={currentSoundName}>
+                    {currentSoundName}
+                  </span>
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                    hasCustomSound
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                  }`}>
+                    {hasCustomSound ? 'CUSTOM' : 'DEFAULT'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  <label className="bg-[#143d26] hover:bg-[#1a4e31] border border-[#dfb64c]/50 hover:border-[#dfb64c] text-[#dfb64c] hover:text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Custom Sound</span>
+                    <input
+                      type="file"
+                      accept="audio/*,.mp3,.wav,.ogg,.m4a"
+                      onChange={handleCustomSoundUpload}
+                      className="sr-only"
+                    />
+                  </label>
+
+                  {hasCustomSound && (
+                    <button
+                      type="button"
+                      onClick={handleResetSoundToDefault}
+                      className="bg-stone-800 hover:bg-stone-700 border border-stone-600 text-stone-300 hover:text-white px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer transition-all"
+                      title="Reset to default Hotel Malabar kitchen bell sound"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 text-[#8ea896]" />
+                      <span>Reset to Default</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {soundSuccessToast && (
+                <div className="mt-2 p-2.5 bg-emerald-950/90 border border-emerald-500/60 rounded-xl text-xs text-emerald-200 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{soundSuccessToast}</span>
+                  </div>
+                  <button onClick={() => setSoundSuccessToast(null)} className="text-emerald-400 hover:text-white cursor-pointer">✕</button>
+                </div>
+              )}
+
+              {soundUploadError && (
+                <div className="mt-2 p-2.5 bg-red-950/90 border border-red-500/60 rounded-xl text-xs text-red-200 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                    <span>{soundUploadError}</span>
+                  </div>
+                  <button onClick={() => setSoundUploadError(null)} className="text-red-400 hover:text-white cursor-pointer">✕</button>
+                </div>
+              )}
 
               {/* Real-time sound notification trigger banner */}
               {audioAlertBanner && (
@@ -1472,7 +2482,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
               )}
             </div>
 
-            {/* NEW ORDER PROMINENT ALERT BANNER */}
+            {/* 5. TODAY'S SALES & ORDERS SUMMARY (REAL-TIME DB METRICS & DAILY CHART) */}
+            <AdminSalesSummary
+              orders={orders}
+              expenses={expenses}
+              selectedDate={salesSummaryDate}
+              todayDate={currentCalendarDate}
+              onSelectDate={(dateYMD) => {
+                setSalesSummaryDate(dateYMD);
+              }}
+              onViewDateInHistory={(dateYMD) => {
+                setOrderFilter('history');
+                setHistoryDateFilter(dateYMD);
+              }}
+              onAddExpense={() => {
+                setExpenseForm({
+                  date: salesSummaryDate || currentCalendarDate,
+                  title: '',
+                  category: 'Kitchen & Groceries',
+                  amount: '',
+                  notes: '',
+                });
+                setExpenseModalOpen(true);
+              }}
+            />
+
+            {/* NEW ORDER PROMINENT ALERT BANNER (ONLY FOR GENUINE NEW ORDERS PLACED TODAY) */}
             {newOrdersCount > 0 && (
               <div className="bg-gradient-to-r from-red-950 via-[#2d1111] to-red-950 border-2 border-red-500 rounded-2xl p-4 sm:p-5 shadow-2xl animate-pulse">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1494,70 +2529,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                     onClick={() => setOrderFilter('new')}
                     className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer shadow"
                   >
-                    View New Orders
+                    View New Orders ({newOrdersCount})
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Orders Header & Filter Pills */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[#1b432a]">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <button
-                  onClick={() => setOrderFilter('all')}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer ${
-                    orderFilter === 'all'
-                      ? 'bg-[#dfb64c] text-[#0a1f13]'
-                      : 'bg-[#123620] text-[#c9dcce] border border-[#245937]'
-                  }`}
-                >
-                  All ({orders.length})
-                </button>
+            {/* Orders Header & Filter Tabs */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#1b432a]">
+              <div className="flex items-center gap-2 overflow-x-auto max-w-full flex-nowrap pb-1 scrollbar-thin">
+                {/* 1. NEW ORDERS */}
                 <button
                   onClick={() => setOrderFilter('new')}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                     orderFilter === 'new'
-                      ? 'bg-red-500 text-white font-bold'
-                      : 'bg-[#123620] text-red-300 border border-[#245937]'
+                      ? 'bg-red-500 text-white shadow-md ring-2 ring-red-400/40'
+                      : newOrdersCount > 0
+                      ? 'bg-red-950 text-red-300 border border-red-600 animate-pulse'
+                      : 'bg-[#123620] text-red-300/80 border border-[#245937] hover:border-red-500/40'
                   }`}
                 >
-                  New ({newOrdersCount})
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>New Orders ({newOrdersCount})</span>
                 </button>
+
+                {/* 2. ACCEPTED ORDERS */}
                 <button
-                  onClick={() => setOrderFilter('active')}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer ${
-                    orderFilter === 'active'
-                      ? 'bg-[#dfb64c] text-[#0a1f13]'
-                      : 'bg-[#123620] text-[#c9dcce] border border-[#245937]'
+                  onClick={() => setOrderFilter('accepted')}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+                    orderFilter === 'accepted'
+                      ? 'bg-emerald-500 text-[#0a1f13] font-bold shadow-md'
+                      : 'bg-[#123620] text-emerald-300 border border-[#245937] hover:border-emerald-500/40'
                   }`}
                 >
-                  Active in Kitchen (
-                  {
-                    orders.filter((o) =>
-                      ['Accepted', 'Preparing', 'Ready', 'Out for Delivery'].includes(o.status)
-                    ).length
-                  }
-                  )
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Accepted Orders ({acceptedOrdersCount})</span>
                 </button>
+
+                {/* 3. TODAY'S ORDERS */}
                 <button
-                  onClick={() => setOrderFilter('completed')}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer ${
-                    orderFilter === 'completed'
-                      ? 'bg-emerald-500 text-[#0a1f13] font-bold'
-                      : 'bg-[#123620] text-emerald-300 border border-[#245937]'
+                  onClick={() => setOrderFilter('today')}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+                    orderFilter === 'today'
+                      ? 'bg-amber-400 text-[#0a1f13] font-bold shadow-md'
+                      : 'bg-[#123620] text-amber-200 border border-[#245937] hover:border-amber-400/40'
                   }`}
                 >
-                  Delivered ({orders.filter((o) => o.status === 'Delivered').length})
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Today's Orders ({todayValidOrdersCount})</span>
                 </button>
+
+                {/* 4. DATE-WISE ORDER HISTORY */}
+                <button
+                  onClick={() => setOrderFilter('history')}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+                    orderFilter === 'history'
+                      ? 'bg-[#dfb64c] text-[#0a1f13] font-bold shadow-md'
+                      : 'bg-[#123620] text-[#c9dcce] border border-[#245937] hover:border-[#dfb64c]/40'
+                  }`}
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Order History ({dateGroups.length} Days)</span>
+                </button>
+
+                {/* 5. REJECTED ORDERS */}
                 <button
                   onClick={() => setOrderFilter('rejected')}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                     orderFilter === 'rejected'
-                      ? 'bg-stone-500 text-white'
-                      : 'bg-[#123620] text-stone-400 border border-[#245937]'
+                      ? 'bg-stone-500 text-white font-bold shadow-md'
+                      : 'bg-[#123620] text-stone-400 border border-[#245937] hover:border-stone-500/40'
                   }`}
                 >
-                  Rejected ({orders.filter((o) => o.status === 'Order Rejected').length})
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>Rejected Orders ({rejectedOrdersCount})</span>
+                </button>
+
+                {/* 6. ALL TODAY */}
+                <button
+                  onClick={() => setOrderFilter('all')}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer transition-all shrink-0 whitespace-nowrap ${
+                    orderFilter === 'all'
+                      ? 'bg-stone-200 text-[#0a1f13] font-bold'
+                      : 'bg-[#123620] text-[#8ea896] border border-[#245937]'
+                  }`}
+                >
+                  All Today ({todayOrdersCount})
                 </button>
               </div>
 
@@ -1574,6 +2631,249 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
               </div>
             </div>
 
+            {/* ORDER HISTORY CONTROLS PANEL (SHOWN WHEN IN ORDER HISTORY TAB) */}
+            {orderFilter === 'history' && (
+              <div className="bg-[#0b2416] border border-[#1e4e30] rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-[#1b432a]">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-[#dfb64c]/10 border border-[#dfb64c]/30 flex items-center justify-center text-[#dfb64c]">
+                      <History className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm sm:text-base font-bold text-[#fcfaf6]">
+                        Date-wise Order History
+                      </h3>
+                      <p className="text-[11px] text-[#8ea896]">
+                        Select any date to view verified orders, total business, collections, expenses, and net profit.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 bg-[#081a10] border border-[#245937] rounded-xl px-2.5 py-1.5 text-xs">
+                      <span className="text-[#8ea896] text-[11px]">Pick Date:</span>
+                      <input
+                        type="date"
+                        value={historyDateFilter === 'all' ? '' : historyDateFilter}
+                        onChange={(e) => setHistoryDateFilter(e.target.value || 'all')}
+                        className="bg-transparent text-[#fcfaf6] font-mono text-xs focus:outline-none cursor-pointer"
+                        title="Choose a specific date to view historical orders"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setHistoryDateFilter('all')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                        historyDateFilter === 'all'
+                          ? 'bg-[#dfb64c] text-[#0a1f13] font-bold shadow'
+                          : 'bg-[#123620] text-[#a6bfae] border border-[#245937]'
+                      }`}
+                    >
+                      All Dates ({orders.length})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Date Selector Carousel */}
+                <div className="space-y-1.5">
+                  <div className="text-[10px] uppercase font-mono tracking-wider text-[#7e9e88]">
+                    Available Order Dates ({dateGroups.length} Days in Database):
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                    {dateGroups.map((grp) => {
+                      const isSelected = historyDateFilter === grp.dateYMD;
+                      return (
+                        <button
+                          key={grp.dateYMD}
+                          type="button"
+                          onClick={() => setHistoryDateFilter(grp.dateYMD)}
+                          className={`px-3.5 py-2 rounded-xl text-left transition-all shrink-0 cursor-pointer border ${
+                            isSelected
+                              ? 'bg-[#dfb64c] text-[#0a1f13] border-[#dfb64c] shadow-lg font-bold ring-2 ring-[#dfb64c]/40 scale-[1.02]'
+                              : 'bg-[#081a10] text-[#c9dcce] border-[#245937] hover:border-[#dfb64c]/60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold">
+                              {grp.isToday ? 'Today' : grp.calendarDate}
+                            </span>
+                            {grp.isToday && (
+                              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold uppercase ${
+                                isSelected ? 'bg-[#0a1f13] text-[#dfb64c]' : 'bg-emerald-950 text-emerald-300 border border-emerald-600'
+                              }`}>
+                                Live
+                              </span>
+                            )}
+                          </div>
+                          <div className={`text-[11px] font-mono mt-0.5 ${isSelected ? 'text-[#0a1f13]' : 'text-[#8ea896]'}`}>
+                            {grp.metrics.totalOrders} {grp.metrics.totalOrders === 1 ? 'order' : 'orders'} • ₹{grp.metrics.totalBusiness.toLocaleString('en-IN')}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Selected Date Summary Banner with the 5 required summary cards */}
+                {selectedDateGroup && (
+                  <div className="bg-gradient-to-r from-[#123620] via-[#0d2818] to-[#123620] border-2 border-[#dfb64c] rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#1b432a]">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-[#dfb64c] bg-[#1a442a] px-2 py-0.5 rounded-full border border-[#dfb64c]/30">
+                            Date-wise Summary
+                          </span>
+                          {selectedDateGroup.isToday && (
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-500">
+                              Today's Metrics
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-lg sm:text-xl font-brand font-bold text-[#fcfaf6] mt-1">
+                          📅 {selectedDateGroup.calendarDate}
+                        </h3>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpenseForm({
+                              date: selectedDateGroup.dateYMD,
+                              title: '',
+                              category: 'Kitchen & Groceries',
+                              amount: '',
+                              notes: '',
+                            });
+                            setExpenseModalOpen(true);
+                          }}
+                          className="bg-[#1b432a] hover:bg-[#235836] border border-[#3b7a52] text-[#fcfaf6] text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 shadow"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-[#dfb64c]" />
+                          Record Day's Expense
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHistoryDateFilter('all')}
+                          className="bg-[#081a10] hover:bg-[#123620] text-[#a6bfae] text-xs px-2.5 py-1.5 rounded-xl border border-[#245937] cursor-pointer"
+                        >
+                          Show All Dates
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 5 Cards for Selected Date */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
+                      {/* 1. Total Orders */}
+                      <div className="bg-[#081a10] border border-[#1b432a] rounded-xl p-3">
+                        <span className="text-[10px] font-mono text-[#8ea896] uppercase block">Total Orders</span>
+                        <span className="text-xl font-bold font-mono text-[#fcfaf6] block mt-1">
+                          {selectedDateGroup.metrics.totalOrders}
+                        </span>
+                        <span className="text-[10px] text-[#5d7c66] block">
+                          Valid orders (excl. rejected)
+                        </span>
+                      </div>
+
+                      {/* 2. Total Business / Sales */}
+                      <div className="bg-[#081a10] border border-[#1b432a] rounded-xl p-3">
+                        <span className="text-[10px] font-mono text-[#8ea896] uppercase block">Total Business / Sales</span>
+                        <span className="text-xl font-bold font-mono text-[#dfb64c] block mt-1">
+                          ₹{selectedDateGroup.metrics.totalBusiness.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[10px] text-[#5d7c66] block">Gross order value</span>
+                      </div>
+
+                      {/* 3. Total Payment / Collection */}
+                      <div className="bg-[#081a10] border border-[#1b432a] rounded-xl p-3">
+                        <span className="text-[10px] font-mono text-[#8ea896] uppercase block">Total Payment / Collection</span>
+                        <span className="text-xl font-bold font-mono text-emerald-400 block mt-1">
+                          ₹{selectedDateGroup.metrics.totalPayment.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[10px] text-emerald-600 block">
+                          Realized / online & delivered
+                        </span>
+                      </div>
+
+                      {/* 4. Day's Expense */}
+                      <div className="bg-[#081a10] border border-[#1b432a] rounded-xl p-3">
+                        <span className="text-[10px] font-mono text-[#8ea896] uppercase block">Day's Expense</span>
+                        <span className="text-xl font-bold font-mono text-amber-400 block mt-1">
+                          ₹{selectedDateGroup.metrics.totalExpense.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[10px] text-[#5d7c66] block">
+                          {selectedDateGroup.metrics.expenseCount || 0} recorded
+                        </span>
+                      </div>
+
+                      {/* 5. Net Amount */}
+                      <div className="bg-[#081a10] border border-[#1b432a] rounded-xl p-3 col-span-2 sm:col-span-1">
+                        <span className="text-[10px] font-mono text-[#8ea896] uppercase block">Net Amount</span>
+                        <span className={`text-xl font-bold font-mono block mt-1 ${
+                          selectedDateGroup.metrics.netAmount >= 0 ? 'text-emerald-300' : 'text-red-400'
+                        }`}>
+                          ₹{selectedDateGroup.metrics.netAmount.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[10px] text-[#5d7c66] block">Collection − Expense</span>
+                      </div>
+                    </div>
+
+                    {selectedDateGroup.metrics.pendingCollection > 0 && (
+                      <div className="text-[11px] text-amber-300/80 bg-amber-950/40 border border-amber-800/40 px-3 py-1.5 rounded-lg flex items-center justify-between">
+                        <span>ℹ️ Pending COD Collection (to be collected on delivery):</span>
+                        <span className="font-mono font-bold text-amber-200">
+                          ₹{selectedDateGroup.metrics.pendingCollection.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* History Search Query */}
+                <div className="flex items-center gap-2 bg-[#081a10] border border-[#245937] rounded-xl px-3 py-2 text-xs">
+                  <Search className="w-4 h-4 text-[#8ea896] shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Search history by Customer Name, Phone, or Order #..."
+                    value={historySearchQuery}
+                    onChange={(e) => setHistorySearchQuery(e.target.value)}
+                    className="bg-transparent text-[#fcfaf6] placeholder-[#5d7c66] focus:outline-none w-full text-xs"
+                  />
+                  {historySearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setHistorySearchQuery('')}
+                      className="text-[#8ea896] hover:text-white text-xs cursor-pointer px-1"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-[#8ea896] flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-[#1a442b]">
+                  <span>
+                    Showing <strong className="text-white font-mono">{filteredOrders.length}</strong>{' '}
+                    {filteredOrders.length === 1 ? 'order' : 'orders'}
+                    {historyDateFilter !== 'all' && (
+                      <>
+                        {' '}for <strong className="text-[#dfb64c] font-mono">{formatDateLabel(historyDateFilter)}</strong>
+                      </>
+                    )}
+                  </span>
+                  {historyDateFilter !== 'all' && (
+                    <button
+                      type="button"
+                      onClick={() => setHistoryDateFilter('all')}
+                      className="text-[#dfb64c] hover:underline cursor-pointer"
+                    >
+                      Show All Historical Dates
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Orders Grid */}
             {filteredOrders.length === 0 ? (
               <div className="bg-[#0e2a1b] border border-[#1b432a] rounded-2xl p-12 text-center text-[#8ea896]">
@@ -1584,12 +2884,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {filteredOrders.map((order) => {
-                  const isNew = order.status === 'Order Placed';
-                  const orderDate = new Date(order.createdAt).toLocaleTimeString('en-IN', {
+                  const isNew = isPendingNewOrder(order) && isOrderToday(order.createdAt, currentCalendarDate);
+                  const isRejected = isRejectedOrder(order);
+                  const isToday = isOrderToday(order.createdAt, currentCalendarDate);
+                  const orderTime = new Date(order.createdAt).toLocaleTimeString('en-IN', {
                     hour: '2-digit',
                     minute: '2-digit',
                     hour12: true,
                   });
+                  const orderDateStr = isToday
+                    ? `Today, ${orderTime}`
+                    : `${new Date(order.createdAt).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}, ${orderTime}`;
 
                   return (
                     <div
@@ -1597,6 +2906,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                       className={`bg-[#0f2d1c] border-2 rounded-2xl p-4 sm:p-5 shadow-lg flex flex-col justify-between transition-all ${
                         isNew
                           ? 'border-red-500 ring-2 ring-red-500/40'
+                          : isRejected
+                          ? 'border-stone-700 bg-[#0d2216]'
                           : 'border-[#235836] hover:border-[#dfb64c]/60'
                       }`}
                     >
@@ -1604,15 +2915,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                         {/* Order Header info */}
                         <div className="flex items-start justify-between gap-2 pb-3 border-b border-[#1b432a]">
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-mono font-bold text-base text-[#dfb64c]">
                                 {order.orderNumber}
                               </span>
-                              <span className="text-xs text-[#8ea896] font-mono">
-                                ({orderDate})
+                              <span className="text-xs text-[#8ea896] font-mono bg-[#081a10] px-2 py-0.5 rounded-lg border border-[#1d462b]">
+                                🕒 {orderDateStr}
                               </span>
                             </div>
-                            <h3 className="font-semibold text-sm sm:text-base text-[#fcfaf6] mt-0.5">
+                            <h3 className="font-semibold text-sm sm:text-base text-[#fcfaf6] mt-1">
                               {order.customerName}
                             </h3>
                             <a
@@ -1630,18 +2941,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                                   ? 'bg-red-500 text-white animate-pulse'
                                   : order.status === 'Delivered'
                                   ? 'bg-emerald-950 border border-emerald-500 text-emerald-300'
-                                  : order.status === 'Order Rejected'
-                                  ? 'bg-stone-900 border border-stone-700 text-stone-400'
+                                  : isRejected
+                                  ? 'bg-stone-900 border border-red-800 text-red-300'
                                   : 'bg-[#143d26] border border-[#dfb64c] text-[#dfb64c]'
                               }`}
                             >
                               {order.status}
                             </span>
+                            {isRejected && (
+                              <span className="text-[10px] text-stone-400 block mt-0.5 font-mono">
+                                (Excluded from Sales)
+                              </span>
+                            )}
                             <span className="text-[11px] text-[#8ea896] block mt-1">
                               {order.deliveryArea} ({order.deliveryDistanceKm} km)
                             </span>
                           </div>
                         </div>
+
+                        {/* Rejection Reason Notice (if rejected) */}
+                        {isRejected && order.rejectionReason && (
+                          <div className="mt-2 p-2 bg-red-950/70 border border-red-800 rounded-xl text-xs text-red-200 flex items-start gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-bold text-red-300">Rejection Reason: </span>
+                              <span>{order.rejectionReason}</span>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Delivery Address & Special Instructions */}
                         <div className="py-2.5 text-xs text-[#c9dcce] border-b border-[#1b432a] space-y-2">
@@ -1739,19 +3066,100 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
 
                         {/* Items List */}
                         <div className="py-3 space-y-1.5 text-xs">
-                          {order.items.map((item) => (
-                            <div
-                              key={item.id}
-                              className="flex justify-between items-center text-[#fcfaf6] bg-[#091a10] px-2.5 py-1.5 rounded-lg"
-                            >
-                              <span className="font-medium">
-                                <strong className="text-[#dfb64c] mr-1.5">{item.quantity}x</strong>
-                                {item.itemName}
-                              </span>
-                              <span className="font-mono text-[#c9dcce]">₹{item.subtotal}</span>
+                          {isNew && (
+                            <div className="flex items-center justify-between pb-1 text-[11px]">
+                              <span className="font-semibold text-[#fcfaf6]">Ordered Food Items:</span>
+                              <span className="text-[10px] text-[#8ea896]">Select item(s) if out of stock</span>
                             </div>
-                          ))}
+                          )}
+                          {order.items.map((item) => {
+                            const matchingMenuItem = menuItems.find(
+                              (m) => m.id === item.itemId || m.name.toLowerCase() === item.itemName.toLowerCase()
+                            );
+                            const resolvedItemId = matchingMenuItem ? matchingMenuItem.id : item.itemId;
+                            const isOutOfStockNow = matchingMenuItem ? !matchingMenuItem.isAvailable : false;
+                            const selectedIds = selectedOutOfStockByOrder[order.id] || [];
+                            const isSelected = selectedIds.includes(resolvedItemId);
+
+                            return (
+                              <div
+                                key={item.id}
+                                className={`flex justify-between items-center text-[#fcfaf6] px-2.5 py-1.5 rounded-lg border transition-colors ${
+                                  isSelected
+                                    ? 'bg-red-950/70 border-red-600 ring-1 ring-red-500/50'
+                                    : isOutOfStockNow
+                                    ? 'bg-[#140b0d] border-red-900/60'
+                                    : 'bg-[#091a10] border-[#1b432a]'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
+                                  {/* 1. Show a checkbox beside each ordered food item on NEW order */}
+                                  {isNew && (
+                                    <label className="flex items-center cursor-pointer shrink-0">
+                                      <input
+                                        type="checkbox"
+                                        id={`item-checkbox-${order.id}-${resolvedItemId}`}
+                                        checked={isSelected}
+                                        onChange={() => handleToggleOrderItemSelection(order.id, resolvedItemId)}
+                                        className="w-4 h-4 rounded border-[#245937] text-red-600 focus:ring-red-500 bg-[#07170e] cursor-pointer accent-red-600"
+                                        title={`Select "${item.itemName}" to mark Out of Stock`}
+                                      />
+                                    </label>
+                                  )}
+
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <span className="font-medium truncate">
+                                      <strong className="text-[#dfb64c] mr-1.5">{item.quantity}x</strong>
+                                      {item.itemName}
+                                    </span>
+                                    {isOutOfStockNow && (
+                                      <span className="shrink-0 text-[9px] font-extrabold text-red-300 uppercase tracking-wide bg-red-950 px-1.5 py-0.5 rounded border border-red-800">
+                                        Out of Stock
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <span className="font-mono text-[#c9dcce] shrink-0">₹{item.subtotal}</span>
+                              </div>
+                            );
+                          })}
                         </div>
+
+                        {/* 3. Add a "Mark Selected Out of Stock" button on every NEW order BEFORE Accept/Reject */}
+                        {isNew && (
+                          <div className="mb-2">
+                            <button
+                              type="button"
+                              id={`mark-out-of-stock-${order.id}`}
+                              disabled={
+                                !selectedOutOfStockByOrder[order.id] ||
+                                selectedOutOfStockByOrder[order.id].length === 0 ||
+                                markingOutOfStockOrderId === order.id
+                              }
+                              onClick={() => handleMarkSelectedOutOfStock(order.id)}
+                              className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[36px] ${
+                                selectedOutOfStockByOrder[order.id] && selectedOutOfStockByOrder[order.id].length > 0
+                                  ? 'bg-red-700 hover:bg-red-600 text-white shadow-md cursor-pointer border border-red-500 ring-2 ring-red-500/50'
+                                  : 'bg-[#15231a] text-[#5e7766] border border-[#1d3826] cursor-not-allowed opacity-70'
+                              }`}
+                              title={
+                                selectedOutOfStockByOrder[order.id] && selectedOutOfStockByOrder[order.id].length > 0
+                                  ? 'Mark only the selected items as OUT OF STOCK'
+                                  : 'Select one or more items above to mark them Out of Stock'
+                              }
+                            >
+                              <XCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>
+                                {markingOutOfStockOrderId === order.id
+                                  ? 'Marking Out of Stock...'
+                                  : selectedOutOfStockByOrder[order.id] && selectedOutOfStockByOrder[order.id].length > 0
+                                  ? `Mark Selected Out of Stock (${selectedOutOfStockByOrder[order.id].length})`
+                                  : 'Mark Selected Out of Stock'}
+                              </span>
+                            </button>
+                          </div>
+                        )}
 
                         {/* Amount & Prep Time */}
                         <div className="pt-2 border-t border-[#1b432a] flex items-center justify-between text-xs">
@@ -1785,23 +3193,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                                 ? new Date(order.acceptedAt).getTime() + (order.preparationMinutes || order.estimatedPrepTimeMinutes || 15) * 60000
                                 : 0;
                               if (!readyMs) return null;
-                              const diffSec = Math.floor((readyMs - adminClock) / 1000);
-                              if (diffSec > 0) {
-                                const m = Math.floor(diffSec / 60);
-                                const s = diffSec % 60;
-                                return (
-                                  <div className="font-mono text-emerald-300 font-bold flex items-center gap-1.5 bg-[#123620] px-2 py-1 rounded border border-[#245937]">
-                                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                                    <span>Remaining Time: {m}m {s < 10 ? '0' : ''}{s}s ({Math.ceil(diffSec / 60)} mins left)</span>
-                                  </div>
-                                );
-                              } else {
-                                return (
-                                  <div className="font-bold text-amber-300 flex items-center gap-1.5 bg-amber-950/80 px-2 py-1 rounded border border-amber-600/40">
-                                    <span>⚠️ Food should be ready now</span>
-                                  </div>
-                                );
-                              }
+                              return <AdminOrderCountdown readyMs={readyMs} />;
                             })()}
                           </div>
                         )}
@@ -1817,37 +3209,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                       {/* Action Controllers */}
                       <div className="mt-4 pt-3 border-t border-[#1b432a] space-y-2">
                         {isNew ? (
-                          /* ACCEPT / REJECT DIRECT ACTIONS (Requirement 13) */
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleAcceptOrderClick(order)}
-                              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow transition-all cursor-pointer"
+                          /* BEFORE ACCEPT / REJECT: CALL CUSTOMER + ACCEPT / REJECT DIRECT ACTIONS */
+                          <div className="space-y-2">
+                            {/* 8. Show a "Call Customer" button using that order customer's phone number */}
+                            <a
+                              href={`tel:${order.customerPhone}`}
+                              id={`call-customer-${order.id}`}
+                              className="w-full bg-[#123620] hover:bg-[#1a4a2c] text-[#dfb64c] hover:text-[#f8df93] border border-[#2e6d44] py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow transition-all cursor-pointer min-h-[38px]"
+                              title={`Call customer ${order.customerName} at ${order.customerPhone}`}
                             >
-                              <CheckCircle2 className="w-4 h-4" />
-                              <span>ACCEPT ORDER</span>
-                            </button>
-                            <button
-                              onClick={() => handleUpdateOrderStatus(order.id, 'Order Rejected')}
-                              className="bg-red-950 hover:bg-red-900 text-red-200 border border-red-700 py-2.5 px-4 rounded-xl text-xs font-semibold cursor-pointer"
-                            >
-                              REJECT
-                            </button>
-                            <button
-                              onClick={() => triggerThermalPrint(order, 'KOT')}
-                              className="bg-[#123620] hover:bg-[#1a472c] text-[#dfb64c] border border-[#245937] px-2.5 py-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-semibold"
-                              title="Print Kitchen Order Ticket (KOT)"
-                            >
-                              <Printer className="w-4 h-4" />
-                              <span className="hidden sm:inline">KOT</span>
-                            </button>
-                            <button
-                              onClick={() => triggerThermalPrint(order, 'BILL')}
-                              className="bg-[#123620] hover:bg-[#1a472c] text-emerald-300 border border-[#245937] px-2.5 py-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-semibold"
-                              title="Print Customer Bill / Invoice"
-                            >
-                              <FileText className="w-4 h-4" />
-                              <span className="hidden sm:inline">Bill</span>
-                            </button>
+                              <Phone className="w-4 h-4 text-[#dfb64c]" />
+                              <span>Call Customer ({order.customerPhone})</span>
+                            </a>
+
+                            {/* 7. Keep BOTH existing Accept Order and Reject Order buttons */}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleAcceptOrderClick(order)}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow transition-all cursor-pointer"
+                              >
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>ACCEPT ORDER</span>
+                              </button>
+                              <button
+                                onClick={() => handleUpdateOrderStatus(order.id, 'Order Rejected')}
+                                className="bg-red-950 hover:bg-red-900 text-red-200 border border-red-700 py-2.5 px-4 rounded-xl text-xs font-semibold cursor-pointer"
+                              >
+                                REJECT
+                              </button>
+                              <button
+                                onClick={() => triggerThermalPrint(order, 'KOT')}
+                                className="bg-[#123620] hover:bg-[#1a472c] text-[#dfb64c] border border-[#245937] px-2.5 py-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-semibold"
+                                title="Print Kitchen Order Ticket (KOT)"
+                              >
+                                <Printer className="w-4 h-4" />
+                                <span className="hidden sm:inline">KOT</span>
+                              </button>
+                              <button
+                                onClick={() => triggerThermalPrint(order, 'BILL')}
+                                className="bg-[#123620] hover:bg-[#1a472c] text-emerald-300 border border-[#245937] px-2.5 py-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-semibold"
+                                title="Print Customer Bill / Invoice"
+                              >
+                                <FileText className="w-4 h-4" />
+                                <span className="hidden sm:inline">Bill</span>
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           /* STEP BY STEP STATUS CONTROLLER (Requirement 15) */
@@ -1947,60 +3353,173 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                 </p>
               </div>
 
-              <button
-                onClick={() => {
-                  setEditingItem(null);
-                  setItemForm({
-                    name: '',
-                    categoryId: categories[0]?.id || '',
-                    price: '',
-                    description: '',
-                    imageUrl:
-                      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80',
-                    isVeg: false,
-                    isAvailable: true,
-                    prepTimeMinutes: '10',
-                  });
-                  setItemModalOpen(true);
-                }}
-                className="bg-gradient-to-r from-[#dfb64c] to-[#cba135] text-[#0a1f13] font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow flex items-center gap-2 cursor-pointer hover:from-[#ebd06b]"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Food Item</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  id="admin-ai-menu-card-import-btn"
+                  onClick={() => setAiImportModalOpen(true)}
+                  className="bg-[#143e26] hover:bg-[#1a4f31] text-[#dfb64c] border border-[#2e6843] font-bold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl shadow flex items-center gap-2 cursor-pointer transition-colors"
+                  title="Upload and scan menu-card photos with AI to extract items, prices & categories"
+                >
+                  <Sparkles className="w-4 h-4 text-[#dfb64c]" />
+                  <span>AI Menu Card Import</span>
+                </button>
+
+                <button
+                  id="admin-add-food-item-btn"
+                  onClick={() => {
+                    setEditingItem(null);
+                    setItemSaveError(null);
+                    setItemForm({
+                      name: '',
+                      categoryId: categories[0]?.id || 'cat_breakfast',
+                      price: '',
+                      description: '',
+                      imageUrl: '',
+                      isVeg: false,
+                      isAvailable: true,
+                      prepTimeMinutes: '10',
+                    });
+                    setItemModalOpen(true);
+                  }}
+                  className="bg-gradient-to-r from-[#dfb64c] to-[#cba135] text-[#0a1f13] font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow flex items-center gap-2 cursor-pointer hover:from-[#ebd06b]"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Food Item</span>
+                </button>
+              </div>
             </div>
 
-            {/* Filter by Category & Search */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex-1 max-w-xs relative">
-                <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#799983]" />
-                <input
-                  type="text"
-                  value={menuSearch}
-                  onChange={(e) => setMenuSearch(e.target.value)}
-                  placeholder="Filter menu items..."
-                  className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-9 pr-3 py-2 text-xs text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
-                />
+            {/* AI Menu Card Import Success Banner */}
+            {importSuccessMessage && (
+              <div className="p-3.5 bg-[#0f3820] border border-[#2b7247] rounded-xl text-xs text-[#b8f5cc] flex items-center justify-between gap-3 shadow-md animate-in fade-in duration-300">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-6 h-6 rounded-full bg-emerald-800 flex items-center justify-center text-emerald-200 shrink-0">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-[#fcfaf6]">Menu Items Successfully Added</p>
+                    <p className="text-[11px] text-[#c0e6ce]">{importSuccessMessage}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setImportSuccessMessage(null)}
+                  className="text-[#96c4a5] hover:text-[#fcfaf6] text-xs font-semibold px-2 py-1 rounded cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {/* Availability Toast notification when admin changes an item */}
+            {availabilityToast && (
+              <div
+                className={`p-3 rounded-xl border flex items-center justify-between gap-3 shadow-lg transition-all animate-fade-in ${
+                  availabilityToast.isAvailable
+                    ? 'bg-emerald-950/90 border-emerald-500 text-emerald-100'
+                    : 'bg-red-950/90 border-red-500 text-red-100'
+                }`}
+              >
+                <div className="flex items-center gap-2 text-xs sm:text-sm">
+                  {availabilityToast.isAvailable ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-red-400 shrink-0" />
+                  )}
+                  <div>
+                    <span className="font-semibold">
+                      Food item &quot;{availabilityToast.itemName}&quot;
+                    </span>{' '}
+                    is now marked as{' '}
+                    <strong className="uppercase font-bold tracking-wide">
+                      {availabilityToast.isAvailable ? 'AVAILABLE' : 'OUT OF STOCK'}
+                    </strong>
+                    . Customer app and ordering have been updated.
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAvailabilityToast(null)}
+                  className="text-stone-300 hover:text-white text-xs font-semibold px-2 py-1 rounded cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {/* Filter by Category, Availability & Search */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0d2819] p-3 rounded-xl border border-[#1b432a]">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAvailabilityFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                    availabilityFilter === 'all'
+                      ? 'bg-[#dfb64c] text-[#0a1f13] font-bold shadow'
+                      : 'bg-[#123620] text-[#96c4a5] hover:bg-[#18462a] border border-[#214f34]'
+                  }`}
+                >
+                  All Items ({menuItems.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAvailabilityFilter('available')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                    availabilityFilter === 'available'
+                      ? 'bg-emerald-600 text-white font-bold shadow'
+                      : 'bg-[#123620] text-emerald-300 hover:bg-[#18462a] border border-[#214f34]'
+                  }`}
+                >
+                  Available ({menuItems.filter((m) => m.isAvailable).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAvailabilityFilter('out_of_stock')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                    availabilityFilter === 'out_of_stock'
+                      ? 'bg-red-600 text-white font-bold shadow'
+                      : 'bg-[#123620] text-red-300 hover:bg-[#18462a] border border-[#214f34]'
+                  }`}
+                >
+                  Out of Stock ({menuItems.filter((m) => !m.isAvailable).length})
+                </button>
               </div>
 
-              <select
-                value={selectedMenuCategory}
-                onChange={(e) => setSelectedMenuCategory(e.target.value)}
-                className="bg-[#123620] border border-[#245937] rounded-xl px-3 py-2 text-xs text-[#fcfaf6] focus:outline-none focus:border-[#dfb64c]"
-              >
-                <option value="all">All 22 Categories</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex flex-wrap items-center gap-3 flex-1 justify-end max-w-md">
+                <div className="flex-1 min-w-[180px] relative">
+                  <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#799983]" />
+                  <input
+                    type="text"
+                    value={menuSearch}
+                    onChange={(e) => setMenuSearch(e.target.value)}
+                    placeholder="Search by food name..."
+                    className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-9 pr-3 py-2 text-xs text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
+                  />
+                </div>
+
+                <select
+                  value={selectedMenuCategory}
+                  onChange={(e) => setSelectedMenuCategory(e.target.value)}
+                  className="bg-[#123620] border border-[#245937] rounded-xl px-3 py-2 text-xs text-[#fcfaf6] focus:outline-none focus:border-[#dfb64c]"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Menu Items Table / Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {menuItems
                 .filter((item) => {
+                  if (availabilityFilter === 'available' && !item.isAvailable) {
+                    return false;
+                  }
+                  if (availabilityFilter === 'out_of_stock' && item.isAvailable) {
+                    return false;
+                  }
                   if (selectedMenuCategory !== 'all' && item.categoryId !== selectedMenuCategory) {
                     return false;
                   }
@@ -2015,39 +3534,86 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                 })
                 .map((item) => {
                   const cat = categories.find((c) => c.id === item.categoryId);
+                  const isUpdating = updatingAvailabilityItemId === item.id;
 
                   return (
                     <div
                       key={item.id}
-                      className="bg-[#0f2d1c] border border-[#214f34] rounded-2xl overflow-hidden shadow flex flex-col justify-between"
+                      id={`admin-item-card-${item.id}`}
+                      className={`bg-[#0f2d1c] border rounded-2xl overflow-hidden shadow flex flex-col justify-between transition-all ${
+                        !item.isAvailable
+                          ? 'border-red-800/80 bg-gradient-to-b from-[#160e10] to-[#0f2d1c]'
+                          : 'border-[#214f34]'
+                      }`}
                     >
                       <div className="relative aspect-[16/9] w-full bg-[#081a10]">
-                        <WatermarkedImage
-                          src={item.imageUrl}
-                          alt={item.name}
-                          className="w-full h-full"
-                          watermarkSize="sm"
-                        />
+                        {item.imageUrl ? (
+                          <WatermarkedImage
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className={`w-full h-full ${!item.isAvailable ? 'grayscale-[30%] opacity-85' : ''}`}
+                            watermarkSize="sm"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-[#07190f] border-b border-[#1b432a] text-[#558064] p-3 text-center">
+                            <Camera className="w-6 h-6 text-[#dfb64c]/50 mb-1" />
+                            <span className="text-[11px] font-semibold text-[#8ea896]">Blank Food Photo</span>
+                            <span className="text-[9px] text-[#558064]">Click top-right camera to upload</span>
+                          </div>
+                        )}
                         <div className="absolute top-2 left-2 bg-[#0a1f13]/85 px-2 py-0.5 rounded text-[10px] text-[#dfb64c] border border-[#214f34]">
                           {cat?.name}
                         </div>
 
-                        {/* Quick photo replacement button */}
-                        <label
-                          className="absolute top-2 right-2 bg-[#0a1f13]/90 hover:bg-[#143d26] text-[#dfb64c] p-1.5 rounded-lg cursor-pointer border border-[#cba135]/50 transition-colors shadow"
-                          title="Quick Replace Photo (Auto-Watermarked)"
-                        >
-                          <Camera className="w-3.5 h-3.5" />
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleQuickPhotoReplace(item, f);
-                            }}
-                          />
-                        </label>
+                        {/* Stock badge overlay on image */}
+                        <div className="absolute bottom-2 left-2">
+                          {item.isAvailable ? (
+                            <span className="inline-flex items-center gap-1 bg-emerald-950/90 text-emerald-300 border border-emerald-600/80 text-[10px] font-extrabold px-2 py-0.5 rounded shadow">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              AVAILABLE
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 bg-red-950/95 text-red-200 border border-red-600 text-[10px] font-extrabold px-2 py-0.5 rounded shadow">
+                              <XCircle className="w-3 h-3 text-red-400" />
+                              OUT OF STOCK
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Quick photo replacement buttons (Upload & Take Photo) */}
+                        <div className="absolute top-2 right-2 flex items-center gap-1">
+                          <label
+                            className="bg-[#0a1f13]/90 hover:bg-[#143d26] text-[#dfb64c] p-1.5 rounded-lg cursor-pointer border border-[#cba135]/50 transition-colors shadow"
+                            title="Upload Photo (File)"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleQuickPhotoReplace(item, f);
+                              }}
+                            />
+                          </label>
+                          <label
+                            className="bg-[#0a1f13]/90 hover:bg-[#143d26] text-[#dfb64c] p-1.5 rounded-lg cursor-pointer border border-[#cba135]/50 transition-colors shadow"
+                            title="Take Photo (Camera)"
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleQuickPhotoReplace(item, f);
+                              }}
+                            />
+                          </label>
+                        </div>
 
                         {quickPhotoLoadingId === item.id && (
                           <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center text-xs text-[#dfb64c] gap-1 z-10">
@@ -2060,9 +3626,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                       <div className="p-4 flex-1 flex flex-col justify-between">
                         <div>
                           <div className="flex items-start justify-between gap-2 mb-1">
-                            <h4 className="font-semibold text-sm sm:text-base text-[#fcfaf6]">
-                              {item.name}
-                            </h4>
+                            <div>
+                              <h4 className="font-semibold text-sm sm:text-base text-[#fcfaf6]">
+                                {item.name}
+                              </h4>
+                              {!item.isAvailable && (
+                                <span className="inline-block text-[10px] font-extrabold text-red-300 uppercase tracking-wider bg-red-950 px-1.5 py-0.5 rounded border border-red-800 mt-0.5">
+                                  Out of Stock
+                                </span>
+                              )}
+                            </div>
                             <span className="font-mono font-bold text-sm text-[#dfb64c]">
                               ₹{item.price}
                             </span>
@@ -2072,82 +3645,126 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                             <span className="bg-[#123620] px-2 py-0.5 rounded border border-[#214f34] text-[#a6bfae]">
                               ⏱ {item.prepTimeMinutes || 10} mins prep
                             </span>
-                            <span className={`px-2 py-0.5 rounded border ${item.isVeg ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-amber-950 text-amber-300 border-amber-800'}`}>
+                            <span
+                              className={`px-2 py-0.5 rounded border ${
+                                item.isVeg
+                                  ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                                  : 'bg-amber-950 text-amber-300 border-amber-800'
+                              }`}
+                            >
                               {item.isVeg ? 'Veg' : 'Non-Veg'}
                             </span>
                           </div>
                         </div>
 
-                        <div className="mt-4 pt-3 border-t border-[#1b432a] flex items-center justify-between gap-2">
-                          <div className="inline-flex items-center rounded-xl bg-[#091a10] p-0.5 border border-[#214f34]">
+                        {/* OUT OF STOCK & AVAILABLE CONTROLS */}
+                        <div className="mt-4 pt-3 border-t border-[#1b432a] space-y-2.5">
+                          {/* Dedicated Status Bar */}
+                          <div className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-lg bg-[#08180e] border border-[#1b432a]">
+                            <span className="text-[#8ea896] text-[11px] font-medium">Status:</span>
+                            {item.isAvailable ? (
+                              <span className="inline-flex items-center gap-1 font-bold text-emerald-400 text-xs">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                Available for Customers
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 font-bold text-red-400 text-xs">
+                                <XCircle className="w-3.5 h-3.5 text-red-400" />
+                                Out of Stock (Disabled)
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Two Clear Actions: Mark Available & Mark Out of Stock */}
+                          <div className="grid grid-cols-2 gap-2">
                             <button
+                              id={`admin-mark-available-${item.id}`}
                               type="button"
-                              onClick={() => !item.isAvailable && handleToggleItemAvailability(item)}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                              disabled={isUpdating}
+                              onClick={() => handleSetItemAvailability(item, true)}
+                              title={`Mark "${item.name}" as Available`}
+                              className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[36px] ${
                                 item.isAvailable
-                                  ? 'bg-emerald-600 text-white shadow'
-                                  : 'text-stone-400 hover:text-emerald-300'
+                                  ? 'bg-emerald-600 text-white ring-2 ring-emerald-400 shadow-md'
+                                  : 'bg-[#0f2c1b] hover:bg-emerald-700/80 text-emerald-300 hover:text-white border border-[#214f34] hover:border-emerald-500'
                               }`}
                             >
-                              AVAILABLE
+                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                              <span>{item.isAvailable ? '✓ Available' : 'Mark Available'}</span>
                             </button>
+
                             <button
+                              id={`admin-mark-out-of-stock-${item.id}`}
                               type="button"
-                              onClick={() => item.isAvailable && handleToggleItemAvailability(item)}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                              disabled={isUpdating}
+                              onClick={() => handleSetItemAvailability(item, false)}
+                              title={`Mark "${item.name}" as Out of Stock`}
+                              className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[36px] ${
                                 !item.isAvailable
-                                  ? 'bg-red-600 text-white shadow'
-                                  : 'text-stone-400 hover:text-red-300'
+                                  ? 'bg-red-600 text-white ring-2 ring-red-400 shadow-md'
+                                  : 'bg-[#251114] hover:bg-red-700/80 text-red-300 hover:text-white border border-red-900/60 hover:border-red-500'
                               }`}
                             >
-                              OUT OF STOCK
+                              <XCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>{!item.isAvailable ? '✕ Out of Stock' : 'Mark Out of Stock'}</span>
                             </button>
                           </div>
 
-                          <div className="flex items-center gap-1.5">
-                            {/* Reorder Buttons */}
-                            <button
-                              onClick={() => handleMoveMenuItem(item.id, 'up')}
-                              className="p-1.5 bg-[#143d26] text-[#dfb64c] hover:bg-[#1d5435] border border-[#214f34] rounded-lg cursor-pointer"
-                              title="Move item up"
-                            >
-                              <ArrowUp className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleMoveMenuItem(item.id, 'down')}
-                              className="p-1.5 bg-[#143d26] text-[#dfb64c] hover:bg-[#1d5435] border border-[#214f34] rounded-lg cursor-pointer"
-                              title="Move item down"
-                            >
-                              <ArrowDown className="w-3.5 h-3.5" />
-                            </button>
+                          {isUpdating && (
+                            <div className="text-center text-[11px] text-[#dfb64c] font-medium flex items-center justify-center gap-1">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              Updating &quot;{item.name}&quot;...
+                            </div>
+                          )}
 
-                            <button
-                              onClick={() => {
-                                setEditingItem(item);
-                                setItemForm({
-                                  name: item.name,
-                                  categoryId: item.categoryId,
-                                  price: item.price.toString(),
-                                  description: item.description,
-                                  imageUrl: item.imageUrl,
-                                  isVeg: item.isVeg,
-                                  isAvailable: item.isAvailable,
-                                  prepTimeMinutes: (item.prepTimeMinutes || 10).toString(),
-                                });
-                                setItemModalOpen(true);
-                              }}
-                              className="p-1.5 bg-[#143d26] text-[#dfb64c] hover:bg-[#1d5435] border border-[#214f34] rounded-lg cursor-pointer"
-                              title="Edit item"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteMenuItem(item.id)}
-                              className="p-1.5 bg-red-950/80 text-red-400 hover:bg-red-900 border border-red-900/60 rounded-lg cursor-pointer"
-                              title="Delete item"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                          {/* Secondary actions: Reorder, Edit, Delete */}
+                          <div className="pt-2 flex items-center justify-between border-t border-[#163622]">
+                            <span className="text-[10px] text-[#6d8a76]">Item Controls:</span>
+                            <div className="flex items-center gap-1.5">
+                              {/* Reorder Buttons */}
+                              <button
+                                onClick={() => handleMoveMenuItem(item.id, 'up')}
+                                className="p-1.5 bg-[#143d26] text-[#dfb64c] hover:bg-[#1d5435] border border-[#214f34] rounded-lg cursor-pointer"
+                                title={`Move "${item.name}" up in menu`}
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleMoveMenuItem(item.id, 'down')}
+                                className="p-1.5 bg-[#143d26] text-[#dfb64c] hover:bg-[#1d5435] border border-[#214f34] rounded-lg cursor-pointer"
+                                title={`Move "${item.name}" down in menu`}
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setEditingItem(item);
+                                  setItemForm({
+                                    name: item.name,
+                                    categoryId: item.categoryId,
+                                    price: item.price.toString(),
+                                    description: item.description,
+                                    imageUrl: item.imageUrl,
+                                    isVeg: item.isVeg,
+                                    isAvailable: item.isAvailable,
+                                    prepTimeMinutes: (item.prepTimeMinutes || 10).toString(),
+                                  });
+                                  setItemModalOpen(true);
+                                }}
+                                className="p-1.5 bg-[#143d26] text-[#dfb64c] hover:bg-[#1d5435] border border-[#214f34] rounded-lg cursor-pointer"
+                                title={`Edit details of "${item.name}"`}
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMenuItem(item.id)}
+                                className="p-1.5 bg-red-950/80 text-red-400 hover:bg-red-900 border border-red-900/60 rounded-lg cursor-pointer"
+                                title={`Delete "${item.name}"`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -2595,6 +4212,438 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
             </div>
           </div>
         )}
+
+        {/* ========================================================================= */}
+        {/* TAB 5: ADMIN SETTINGS (CUSTOM ORDER SOUND & NOTIFICATION CONTROLS)       */}
+        {/* ========================================================================= */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6 max-w-4xl">
+            <div className="pb-3 border-b border-[#1b432a]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#143d26] text-[#dfb64c] flex items-center justify-center border border-[#dfb64c]/40">
+                  <Sliders className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-brand font-bold text-[#fcfaf6]">
+                    Admin Settings — New Order Sound Notification
+                  </h2>
+                  <p className="text-xs text-[#8ea896] mt-0.5">
+                    Manage incoming customer order notification sounds, upload custom audio, preview playback, or reset to Hotel Malabar's default bell chime.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {soundSuccessToast && (
+              <div className="p-3 bg-emerald-950/90 border border-emerald-500 rounded-xl text-xs text-emerald-200 flex items-center justify-between gap-2 shadow-lg">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{soundSuccessToast}</span>
+                </div>
+                <button
+                  onClick={() => setSoundSuccessToast(null)}
+                  className="text-emerald-400 hover:text-white text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {soundUploadError && (
+              <div className="p-3 bg-red-950/90 border border-red-500 rounded-xl text-xs text-red-200 flex items-center justify-between gap-2 shadow-lg">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{soundUploadError}</span>
+                </div>
+                <button
+                  onClick={() => setSoundUploadError(null)}
+                  className="text-red-400 hover:text-white text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* SOUND SETTINGS PANEL */}
+            <div className="bg-[#0e2a1b] border border-[#1b432a] rounded-2xl p-5 space-y-6">
+              {/* CURRENT SOUND NAME SECTION */}
+              <div className="p-4 bg-[#0a1f13] border border-[#1d462b] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="text-[11px] font-bold text-[#8ea896] uppercase tracking-wider flex items-center gap-2">
+                    <span>Current Active Sound</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      hasCustomSound
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    }`}>
+                      {hasCustomSound ? 'CUSTOM SOUND ACTIVE' : 'HOTEL MALABAR DEFAULT'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-[#143d26] text-[#dfb64c] flex items-center justify-center shrink-0">
+                      <Bell className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm sm:text-base font-bold text-[#fcfaf6] font-mono break-all">
+                        {currentSoundName}
+                      </p>
+                      <p className="text-[11px] text-[#8ea896]">
+                        {hasCustomSound
+                          ? 'This custom sound plays automatically whenever a customer places an order.'
+                          : 'Using the authentic Hotel Malabar 3-strike kitchen bell chime MP3/alert.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Indicator */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`w-3 h-3 rounded-full ${soundEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+                  <span className="text-xs font-semibold text-[#fcfaf6]">
+                    {soundEnabled ? 'Alerts Enabled' : 'Alerts Muted'}
+                  </span>
+                </div>
+              </div>
+
+              {/* ACTION CONTROLS: Upload Custom Sound, Test Sound, Reset to Default */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1. Upload Custom Sound */}
+                <label className="relative flex flex-col items-center justify-center p-4 rounded-xl border border-dashed border-[#dfb64c]/70 hover:border-[#dfb64c] bg-[#123620]/60 hover:bg-[#123620] text-center cursor-pointer transition-all group">
+                  <Upload className="w-6 h-6 text-[#dfb64c] mb-1.5 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs font-bold text-[#dfb64c]">Upload Custom Sound</span>
+                  <span className="text-[10px] text-[#8ea896] mt-0.5">MP3, WAV, OGG, M4A (Max 8MB)</span>
+                  <input
+                    type="file"
+                    accept="audio/*,.mp3,.wav,.ogg,.m4a"
+                    onChange={handleCustomSoundUpload}
+                    className="sr-only"
+                  />
+                </label>
+
+                {/* 2. Test Sound */}
+                <button
+                  type="button"
+                  onClick={handleTestSoundAlert}
+                  className={`flex flex-col items-center justify-center p-4 rounded-xl border text-center transition-all cursor-pointer ${
+                    isSoundTesting
+                      ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-2 ring-amber-400/50'
+                      : 'bg-[#143d26] hover:bg-[#1a4f32] border-[#225736] text-[#fcfaf6] hover:border-[#dfb64c]'
+                  }`}
+                  title="Test current notification sound"
+                >
+                  <Bell className={`w-6 h-6 mb-1.5 ${isSoundTesting ? 'text-amber-400 animate-bounce' : 'text-[#dfb64c]'}`} />
+                  <span className="text-xs font-bold">
+                    {isSoundTesting ? 'Playing Sound...' : 'Test Sound'}
+                  </span>
+                  <span className="text-[10px] text-[#8ea896] mt-0.5">Click to preview active chime</span>
+                </button>
+
+                {/* 3. Reset to Default */}
+                <button
+                  type="button"
+                  onClick={handleResetSoundToDefault}
+                  disabled={!hasCustomSound}
+                  className={`flex flex-col items-center justify-center p-4 rounded-xl border text-center transition-all cursor-pointer ${
+                    hasCustomSound
+                      ? 'bg-[#1b261e] hover:bg-stone-800 border-stone-600 text-stone-200 hover:text-white'
+                      : 'bg-[#102016] border-[#163322] text-[#526f5c] cursor-not-allowed opacity-60'
+                  }`}
+                  title="Reset to default Hotel Malabar kitchen bell sound"
+                >
+                  <RefreshCw className="w-6 h-6 text-[#8ea896] mb-1.5" />
+                  <span className="text-xs font-bold">Reset to Default</span>
+                  <span className="text-[10px] text-[#8ea896] mt-0.5">
+                    {hasCustomSound ? 'Revert back to Hotel Malabar MP3' : 'Already on default sound'}
+                  </span>
+                </button>
+              </div>
+
+              {/* PLAYBACK PREFERENCES: Mute & Repeat */}
+              <div className="pt-4 border-t border-[#1b432a] space-y-3">
+                <h3 className="text-xs font-bold text-[#dfb64c] uppercase tracking-wider">
+                  Playback Controls & Repeat Behavior
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3.5 bg-[#0a1f13] border border-[#1d462b] rounded-xl flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-[#fcfaf6]">Notification Sound</p>
+                      <p className="text-[11px] text-[#8ea896]">Enable or mute all order arrival audio alerts</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleToggleSound}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        soundEnabled
+                          ? 'bg-emerald-600 hover:bg-emerald-500 text-[#091a10]'
+                          : 'bg-red-950 border border-red-500 text-red-300'
+                      }`}
+                    >
+                      {soundEnabled ? (
+                        <>
+                          <Volume2 className="w-3.5 h-3.5" />
+                          <span>Enabled</span>
+                        </>
+                      ) : (
+                        <>
+                          <VolumeX className="w-3.5 h-3.5" />
+                          <span>Muted</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="p-3.5 bg-[#0a1f13] border border-[#1d462b] rounded-xl flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-[#fcfaf6]">Repeat Until Accepted</p>
+                      <p className="text-[11px] text-[#8ea896]">Repeat alert every 20s while new orders wait</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleToggleRepeatSound}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        repeatSoundUntilAccepted
+                          ? 'bg-[#dfb64c] text-[#0a1f13]'
+                          : 'bg-[#143d26] text-[#8ea896] border border-[#1d462b]'
+                      }`}
+                    >
+                      {repeatSoundUntilAccepted ? 'Repeat: ON' : 'Repeat: OFF'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* PERSISTENCE NOTE */}
+              <div className="p-3 bg-[#0a1f13] border border-[#1d462b] rounded-xl flex items-start gap-2.5 text-xs text-[#8ea896]">
+                <ShieldCheck className="w-4 h-4 text-[#dfb64c] shrink-0 mt-0.5" />
+                <span>
+                  Sound configuration is securely stored both in local browser storage and in your database. Your chosen custom sound will persist across page refreshes and subsequent admin re-logins.
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 8: CUSTOMER FOOD RATINGS & REVIEWS (Requirement 1)                    */}
+        {/* ========================================================================= */}
+        {activeTab === 'ratings' && (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#1b432a]">
+              <div>
+                <h2 className="text-xl font-brand font-bold text-[#fcfaf6] flex items-center gap-2">
+                  <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
+                  <span>Customer Food Ratings & Reviews</span>
+                </h2>
+                <p className="text-xs text-[#8ea896]">
+                  Real 1 to 5 star ratings and reviews submitted by customers after order delivery.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={fetchAllAdminData}
+                  className="px-3 py-1.5 bg-[#123620] hover:bg-[#184428] border border-[#245937] text-xs font-semibold rounded-xl text-[#c9dcce] flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Refresh Ratings</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Metrics Overview Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-[#0f2d1c] border border-[#235836] rounded-2xl p-4">
+                <span className="text-[11px] text-[#8ea896] block uppercase tracking-wider">Average Rating</span>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-2xl sm:text-3xl font-bold font-mono text-amber-400">
+                    {ratings.length > 0
+                      ? (ratings.reduce((acc, r) => acc + (r.rating || 0), 0) / ratings.length).toFixed(1)
+                      : '0.0'}
+                  </span>
+                  <span className="text-xs text-[#8ea896]">/ 5.0</span>
+                </div>
+                <div className="flex items-center gap-1 mt-1 text-amber-400 text-xs">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Star
+                      key={s}
+                      className={`w-3.5 h-3.5 ${
+                        s <= Math.round(ratings.length > 0 ? ratings.reduce((acc, r) => acc + (r.rating || 0), 0) / ratings.length : 0)
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'text-stone-600'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-[#0f2d1c] border border-[#235836] rounded-2xl p-4">
+                <span className="text-[11px] text-[#8ea896] block uppercase tracking-wider">Total Ratings</span>
+                <span className="text-2xl sm:text-3xl font-bold font-mono text-[#dfb64c] block mt-1">
+                  {ratings.length}
+                </span>
+                <span className="text-[10px] text-[#8ea896] mt-1 block">From delivered orders</span>
+              </div>
+
+              <div className="bg-[#0f2d1c] border border-[#235836] rounded-2xl p-4">
+                <span className="text-[11px] text-[#8ea896] block uppercase tracking-wider">5-Star Reviews</span>
+                <span className="text-2xl sm:text-3xl font-bold font-mono text-emerald-400 block mt-1">
+                  {ratings.filter((r) => r.rating === 5).length}
+                </span>
+                <span className="text-[10px] text-[#8ea896] mt-1 block">
+                  {ratings.length > 0 ? `${Math.round((ratings.filter((r) => r.rating === 5).length / ratings.length) * 100)}% excellence` : 'No ratings yet'}
+                </span>
+              </div>
+
+              <div className="bg-[#0f2d1c] border border-[#235836] rounded-2xl p-4">
+                <span className="text-[11px] text-[#8ea896] block uppercase tracking-wider">With Comments</span>
+                <span className="text-2xl sm:text-3xl font-bold font-mono text-[#fcfaf6] block mt-1">
+                  {ratings.filter((r) => r.review && r.review.trim()).length}
+                </span>
+                <span className="text-[10px] text-[#8ea896] mt-1 block">Detailed customer feedback</span>
+              </div>
+            </div>
+
+            {/* Filter & Search Controls */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0c2417] p-3 rounded-2xl border border-[#1b432a]">
+              <div className="flex items-center gap-1.5 overflow-x-auto">
+                {(['all', '5', '4', '3', '2', '1'] as const).map((filterVal) => (
+                  <button
+                    key={filterVal}
+                    type="button"
+                    onClick={() => setRatingsFilter(filterVal)}
+                    className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1 ${
+                      ratingsFilter === filterVal
+                        ? 'bg-[#dfb64c] text-[#0a1f13]'
+                        : 'bg-[#113320] text-[#a6bfae] hover:text-[#fcfaf6] border border-[#214f34]'
+                    }`}
+                  >
+                    {filterVal === 'all' ? (
+                      <span>All ({ratings.length})</span>
+                    ) : (
+                      <>
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        <span>{filterVal} Star ({ratings.filter((r) => r.rating === Number(filterVal)).length})</span>
+                      </>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="w-full sm:w-64 relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#799983]" />
+                <input
+                  type="text"
+                  value={ratingsSearchQuery}
+                  onChange={(e) => setRatingsSearchQuery(e.target.value)}
+                  placeholder="Search item, customer, order..."
+                  className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-8 pr-3 py-1.5 text-xs text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
+                />
+              </div>
+            </div>
+
+            {/* Ratings List / Cards */}
+            {(() => {
+              const filteredRatings = ratings.filter((r) => {
+                if (ratingsFilter !== 'all' && r.rating !== Number(ratingsFilter)) {
+                  return false;
+                }
+                if (ratingsSearchQuery.trim()) {
+                  const q = ratingsSearchQuery.toLowerCase().trim();
+                  const matchItem = (r.itemName || '').toLowerCase().includes(q);
+                  const matchCustomer = (r.customerName || '').toLowerCase().includes(q);
+                  const matchOrder = (r.orderNumber || '').toLowerCase().includes(q);
+                  const matchReview = (r.review || '').toLowerCase().includes(q);
+                  return matchItem || matchCustomer || matchOrder || matchReview;
+                }
+                return true;
+              });
+
+              if (filteredRatings.length === 0) {
+                return (
+                  <div className="bg-[#0f2d1c] border border-[#235836] rounded-2xl p-10 text-center text-[#8ea896]">
+                    <div className="w-12 h-12 rounded-full bg-[#164027] border border-[#2e6843] flex items-center justify-center text-amber-400 mx-auto mb-3">
+                      <Star className="w-6 h-6" />
+                    </div>
+                    <p className="text-sm font-semibold text-[#fcfaf6] mb-1">
+                      {ratings.length === 0 ? 'No Customer Ratings Yet' : 'No Ratings Match Filter'}
+                    </p>
+                    <p className="text-xs max-w-sm mx-auto">
+                      {ratings.length === 0
+                        ? 'When customers complete delivered orders and rate their food items, their 1 to 5 star ratings and reviews will automatically appear here.'
+                        : 'Try selecting "All" or clearing the search box.'}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredRatings.map((r) => (
+                    <div
+                      key={r.id}
+                      className="bg-[#0f2d1c] border border-[#235836] rounded-2xl p-4 shadow-sm hover:border-[#dfb64c]/60 transition-all flex flex-col justify-between space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="font-bold text-sm sm:text-base text-[#fcfaf6] leading-snug">
+                            {r.itemName}
+                          </h3>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className="text-xs font-mono font-bold text-[#dfb64c] bg-[#143d26] px-2 py-0.5 rounded border border-[#245937]">
+                              {r.orderNumber || `#${r.orderId.slice(0, 6)}`}
+                            </span>
+                            <span className="text-[11px] text-[#8ea896]">•</span>
+                            <span className="text-[11px] text-[#8ea896]">
+                              {new Date(r.createdAt).toLocaleDateString('en-IN', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Star Rating Badge */}
+                        <div className="flex items-center gap-1 bg-amber-950/80 border border-amber-500/40 text-amber-300 px-2.5 py-1 rounded-xl text-xs font-bold shrink-0">
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                          <span>{r.rating}.0</span>
+                        </div>
+                      </div>
+
+                      {/* Review text if provided */}
+                      {r.review && r.review.trim() ? (
+                        <div className="bg-[#091a10] border border-[#1b432a] rounded-xl p-2.5 text-xs text-[#c9dcce] italic">
+                          "{r.review.trim()}"
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-[#6d8a76] italic">
+                          No written comment provided
+                        </div>
+                      )}
+
+                      {/* Customer Info Footer */}
+                      <div className="pt-2 border-t border-[#184227] flex items-center justify-between text-[11px] text-[#8ea896]">
+                        <span className="flex items-center gap-1 text-[#c9dcce] font-medium">
+                          <Users className="w-3 h-3 text-[#dfb64c]" />
+                          <span>{r.customerName || 'Customer'}</span>
+                        </span>
+                        {r.customerPhone && (
+                          <span className="font-mono text-[#8ea896]">
+                            {r.customerPhone}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        )}
       </main>
       </div>
 
@@ -2723,6 +4772,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
             </div>
 
             <form onSubmit={handleSaveMenuItem} className="space-y-3 text-xs">
+              {!editingItem && (
+                <div className="p-3 bg-[#0d2919] border border-[#205234] rounded-xl flex items-center justify-between gap-3 mb-2">
+                  <div className="flex items-center gap-2 text-xs text-[#c9dcce]">
+                    <Sparkles className="w-4 h-4 text-[#dfb64c] shrink-0" />
+                    <span>Have printed menu card photos? Import multiple items at once using AI scan.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemModalOpen(false);
+                      setAiImportModalOpen(true);
+                    }}
+                    className="bg-[#dfb64c] hover:bg-[#ebd06b] text-[#0a1f13] font-bold text-[11px] px-3 py-1.5 rounded-lg shrink-0 flex items-center gap-1 cursor-pointer transition-colors shadow"
+                  >
+                    <span>Import Photos</span>
+                  </button>
+                </div>
+              )}
+              {itemSaveError && (
+                <div className="p-3 bg-red-950/80 border border-red-800 text-red-300 rounded-xl text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span>{itemSaveError}</span>
+                </div>
+              )}
               <div>
                 <label className="block text-[#c9dcce] mb-1 font-semibold">Item Name</label>
                 <input
@@ -2739,7 +4812,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                 <div>
                   <label className="block text-[#c9dcce] mb-1 font-semibold">Category</label>
                   <select
-                    value={itemForm.categoryId}
+                    value={itemForm.categoryId || categories[0]?.id || ''}
                     onChange={(e) => setItemForm({ ...itemForm, categoryId: e.target.value })}
                     className="w-full bg-[#123620] border border-[#245937] rounded-xl px-3 py-2 text-sm text-[#fcfaf6] focus:outline-none focus:border-[#dfb64c]"
                   >
@@ -2787,42 +4860,123 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                 />
               </div>
 
-              {/* Automated Watermark Upload Section (Requirement 16) */}
-              <div className="p-3 bg-[#0a1f13] border border-[#225535] rounded-xl space-y-2">
+              {/* Food Item Photo Management: Upload, Take Photo, Preview, Replace, Keep Empty */}
+              <div className="p-3.5 bg-[#0a1f13] border border-[#225535] rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="font-semibold text-[#dfb64c] flex items-center gap-1.5">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Upload Food Photo (Automated Watermark)</span>
+                  <label className="font-semibold text-[#dfb64c] flex items-center gap-1.5 text-xs">
+                    <Camera className="w-4 h-4 text-[#dfb64c]" />
+                    <span>Food Item Photo</span>
                   </label>
-                  <span className="text-[10px] text-[#8ea896]">Instant Canvas Baking</span>
+                  <span className="text-[10px] font-medium text-[#8ea896]">
+                    {itemForm.imageUrl ? 'Photo Attached' : 'No Photo (Blank)'}
+                  </span>
                 </div>
 
+                {/* Hidden inputs: One for file picker (Upload), one for Camera capture (Take Photo) */}
                 <input
+                  ref={uploadInputRef}
                   type="file"
                   accept="image/*"
                   onChange={handleImageFileChange}
-                  className="w-full text-xs text-[#a6bfae] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#164027] file:text-[#dfb64c] hover:file:bg-[#1d5435] cursor-pointer"
+                  className="hidden"
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleImageFileChange}
+                  className="hidden"
                 />
 
+                {/* Processing/Loading feedback */}
                 {imageUploading && (
-                  <div className="text-xs text-[#dfb64c] flex items-center gap-1">
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    <span>Baking watermark into image...</span>
+                  <div className="p-2.5 bg-[#123620] border border-[#245937] rounded-xl text-xs text-[#dfb64c] flex items-center justify-center gap-2">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Processing & preparing photo...</span>
                   </div>
                 )}
 
-                {itemForm.imageUrl && (
-                  <div className="mt-2">
-                    <span className="text-[10px] text-[#8ea896] block mb-1">
-                      Live Watermarked Preview:
-                    </span>
-                    <div className="relative aspect-[16/9] w-full rounded-lg overflow-hidden border border-[#dfb64c]/40">
+                {/* Photo Preview & Controls */}
+                {itemForm.imageUrl ? (
+                  <div className="space-y-2.5">
+                    <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden border border-[#dfb64c]/50 bg-[#07190f] shadow-md">
                       <WatermarkedImage
                         src={itemForm.imageUrl}
-                        alt="Preview"
-                        className="w-full h-full"
+                        alt="Photo Preview"
+                        className="w-full h-full object-cover"
                         watermarkSize="sm"
                       />
+                      <div className="absolute top-2 left-2 bg-[#0a1f13]/90 backdrop-blur-sm border border-[#dfb64c]/40 text-[#dfb64c] text-[10px] font-bold px-2 py-0.5 rounded shadow">
+                        Photo Preview
+                      </div>
+                    </div>
+
+                    {/* Replace Photo & Remove Photo (Keep Empty) Buttons */}
+                    <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => uploadInputRef.current?.click()}
+                          className="px-2.5 py-1.5 bg-[#143d26] hover:bg-[#1a4f32] text-[#dfb64c] hover:text-white border border-[#265e3b] hover:border-[#dfb64c] rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                          title="Upload replacement photo from file"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Replace (Upload)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => cameraInputRef.current?.click()}
+                          className="px-2.5 py-1.5 bg-[#143d26] hover:bg-[#1a4f32] text-[#dfb64c] hover:text-white border border-[#265e3b] hover:border-[#dfb64c] rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                          title="Take replacement photo with camera"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>Replace (Camera)</span>
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setItemForm((prev) => ({ ...prev, imageUrl: '' }))}
+                        className="px-2.5 py-1.5 bg-red-950/70 hover:bg-red-900 border border-red-800 text-red-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                        title="Remove photo and keep empty"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove Photo</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Blank state: guidance and Upload / Take Photo buttons */
+                  <div className="space-y-2.5">
+                    <div className="p-4 bg-[#07190f] border border-dashed border-[#225736] rounded-xl flex flex-col items-center justify-center text-center">
+                      <div className="w-10 h-10 rounded-full bg-[#123620] border border-[#225736] flex items-center justify-center text-[#dfb64c] mb-2 shadow-inner">
+                        <Camera className="w-5 h-5" />
+                      </div>
+                      <p className="text-xs font-semibold text-[#fcfaf6]">No photo attached</p>
+                      <p className="text-[10px] text-[#8ea896] mt-0.5">
+                        Food item will be saved with a blank/empty photo unless you upload or capture one.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => uploadInputRef.current?.click()}
+                        className="py-2 px-3 bg-[#143d26] hover:bg-[#1a4f32] text-[#dfb64c] hover:text-white border border-[#265e3b] hover:border-[#dfb64c] rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Upload Photo</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="py-2 px-3 bg-[#143d26] hover:bg-[#1a4f32] text-[#dfb64c] hover:text-white border border-[#265e3b] hover:border-[#dfb64c] rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span>Take Photo</span>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -2859,10 +5013,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                   Cancel
                 </button>
                 <button
+                  id="admin-save-menu-item-btn"
                   type="submit"
-                  className="flex-1 bg-gradient-to-r from-[#dfb64c] to-[#cba135] text-[#0a1f13] font-bold py-2.5 rounded-xl shadow cursor-pointer"
+                  disabled={isSavingItem}
+                  className="flex-1 bg-gradient-to-r from-[#dfb64c] to-[#cba135] text-[#0a1f13] font-bold py-2.5 rounded-xl shadow cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Save Item
+                  {isSavingItem ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Item...</span>
+                    </>
+                  ) : (
+                    'Save Item'
+                  )}
                 </button>
               </div>
             </form>
@@ -3091,9 +5254,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                     <span>PRICE</span>
                   </div>
                   {selectedOrderForKOT.items.map((it) => (
-                    <div key={it.id} className="flex justify-between text-[10.5px]">
-                      <span><strong>{it.quantity}x</strong> {it.itemName}</span>
-                      <span className="font-bold">Rs.{it.subtotal}</span>
+                    <div key={it.id} className="flex justify-between items-start text-[10.5px] gap-2">
+                      <span className="break-words flex-1 leading-tight"><strong>{it.quantity}x</strong> {it.itemName}</span>
+                      <span className="font-bold shrink-0">Rs.{it.subtotal}</span>
                     </div>
                   ))}
                 </div>
@@ -3146,8 +5309,207 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* MODAL: DAILY EXPENSE MANAGEMENT (HOTEL MALABAR ACCOUNTS)                 */}
+      {/* ========================================================================= */}
+      {expenseModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-lg bg-[#0e2a1b] border-2 border-amber-500/60 rounded-2xl p-6 text-[#fdfbf7] shadow-2xl my-8 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#1b432a]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-brand text-lg font-bold text-white">
+                    Record Daily Expense
+                  </h3>
+                  <p className="text-xs text-[#8ea896]">
+                    Hotel Malabar Daily Accounts & Profit Deduction
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpenseModalOpen(false)}
+                className="text-[#8ea896] hover:text-white cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddExpenseSubmit} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-[#8ea896] mb-1">
+                    Expense Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={expenseForm.date}
+                    onChange={(e) => setExpenseForm((prev) => ({ ...prev, date: e.target.value }))}
+                    className="w-full bg-[#081a10] border border-[#245937] rounded-xl px-3 py-2 text-[#fcfaf6] text-xs focus:border-amber-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-[#8ea896] mb-1">
+                    Category *
+                  </label>
+                  <select
+                    value={expenseForm.category}
+                    onChange={(e) => setExpenseForm((prev) => ({ ...prev, category: e.target.value }))}
+                    className="w-full bg-[#081a10] border border-[#245937] rounded-xl px-3 py-2 text-[#fcfaf6] text-xs focus:border-amber-400 focus:outline-none"
+                  >
+                    <option value="Kitchen & Groceries">Kitchen & Groceries (Chicken, Veg, Spices)</option>
+                    <option value="Packaging & Bags">Packaging & Parcel Bags</option>
+                    <option value="Utilities & Gas">Utilities, LPG Gas & Power</option>
+                    <option value="Staff & Labor">Staff Daily Wages & Food</option>
+                    <option value="Delivery & Fuel">Delivery & Bike Fuel</option>
+                    <option value="Maintenance">Maintenance & Repairs</option>
+                    <option value="Other">Other Miscellaneous</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-[#8ea896] mb-1">
+                  Expense Description / Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., 5kg Fresh Chicken & Biryani Rice purchase"
+                  value={expenseForm.title}
+                  onChange={(e) => setExpenseForm((prev) => ({ ...prev, title: e.target.value }))}
+                  className="w-full bg-[#081a10] border border-[#245937] rounded-xl px-3 py-2 text-[#fcfaf6] text-xs focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-[#8ea896] mb-1">
+                  Amount in Rupees (₹) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-[#8ea896] font-bold text-xs">₹</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="any"
+                    required
+                    placeholder="0"
+                    value={expenseForm.amount}
+                    onChange={(e) => setExpenseForm((prev) => ({ ...prev, amount: e.target.value }))}
+                    className="w-full bg-[#081a10] border border-[#245937] rounded-xl pl-7 pr-3 py-2 text-amber-300 font-mono font-bold text-sm focus:border-amber-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-[#8ea896] mb-1">
+                  Notes / Bill Details (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Paid via cash from cash drawer"
+                  value={expenseForm.notes}
+                  onChange={(e) => setExpenseForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  className="w-full bg-[#081a10] border border-[#245937] rounded-xl px-3 py-2 text-[#fcfaf6] text-xs focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setExpenseModalOpen(false)}
+                  className="px-4 py-2 bg-[#123620] hover:bg-[#1a472c] text-[#c9dcce] rounded-xl font-medium cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={expenseSubmitting}
+                  className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-[#0a1f13] font-bold rounded-xl shadow cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {expenseSubmitting ? 'Saving...' : 'Save Expense'}
+                </button>
+              </div>
+            </form>
+
+            {/* List of recorded expenses for this date */}
+            <div className="pt-4 border-t border-[#1b432a] space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-[#8ea896]">
+                  Recorded Expenses for {formatCalendarDate(expenseForm.date)}:
+                </span>
+                <span className="font-mono font-bold text-amber-300">
+                  Total: ₹
+                  {expenses
+                    .filter((ex) => ex.date === expenseForm.date)
+                    .reduce((sum, ex) => sum + (Number(ex.amount) || 0), 0)
+                    .toLocaleString('en-IN')}
+                </span>
+              </div>
+
+              {expenses.filter((ex) => ex.date === expenseForm.date).length === 0 ? (
+                <div className="p-3 bg-[#081a10] rounded-xl text-center text-xs text-[#5d7c66]">
+                  No expenses recorded yet for this date.
+                </div>
+              ) : (
+                <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                  {expenses
+                    .filter((ex) => ex.date === expenseForm.date)
+                    .map((ex) => (
+                      <div
+                        key={ex.id}
+                        className="bg-[#081a10] border border-[#1b432a] rounded-xl p-2.5 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-semibold text-white truncate">{ex.title}</div>
+                          <div className="text-[10px] text-[#8ea896] flex items-center gap-1.5">
+                            <span>{ex.category}</span>
+                            {ex.notes && <span>• {ex.notes}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-mono font-bold text-amber-400">
+                            ₹{Number(ex.amount).toLocaleString('en-IN')}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteExpense(ex.id)}
+                            className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
+                            title="Delete this expense record"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Fallback DOM Thermal Print Target */}
       <div id="thermal-print-container" className="hidden" />
+
+      {/* AI Menu Card Photo Import Modal */}
+      <MenuCardImportModal
+        isOpen={aiImportModalOpen}
+        onClose={() => setAiImportModalOpen(false)}
+        categories={categories}
+        adminToken={adminToken || ''}
+        onItemsAdded={(newItems) => {
+          setMenuItems((prev) => [...newItems, ...prev]);
+          setImportSuccessMessage(`Successfully imported and added ${newItems.length} items to the menu!`);
+          setTimeout(() => setImportSuccessMessage(null), 7000);
+          fetchAllAdminData();
+        }}
+      />
     </div>
   );
 };

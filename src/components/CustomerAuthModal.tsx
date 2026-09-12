@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Lock, Phone, User, Eye, EyeOff, ShieldCheck, KeyRound, AlertCircle, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Phone, User, ArrowRight, AlertCircle, CheckCircle2, UtensilsCrossed } from 'lucide-react';
 import { User as UserType } from '../types';
 
 interface CustomerAuthModalProps {
@@ -11,50 +11,91 @@ interface CustomerAuthModalProps {
 
 export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   isOpen,
-  initialMode = 'login',
   onClose,
   onAuthSuccess,
 }) => {
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showPin, setShowPin] = useState(false);
-
-  // Form states
   const [phone, setPhone] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [password, setPassword] = useState('');
-  const [privacyPin, setPrivacyPin] = useState('');
-  const [newPassword, setNewPassword] = useState('');
 
   const [loading, setLoading] = useState(false);
+  const [lookupLoading, setLookupLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setError(null);
+      setSuccessMessage(null);
+      setTimeout(() => {
+        phoneInputRef.current?.focus();
+      }, 150);
+    }
+  }, [isOpen]);
+
+  // When 10 digits are typed, quickly check if returning customer to auto-fill names
+  useEffect(() => {
+    const cleanDigits = phone.replace(/\D/g, '');
+    if (cleanDigits.length === 10) {
+      let isCurrent = true;
+      setLookupLoading(true);
+      fetch(`/api/auth/lookup-customer?phone=${cleanDigits}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (!isCurrent) return;
+          if (data?.found) {
+            if (data.firstName && !firstName) setFirstName(data.firstName);
+            if (data.lastName && !lastName) setLastName(data.lastName);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (isCurrent) setLookupLoading(false);
+        });
+      return () => {
+        isCurrent = false;
+      };
+    }
+  }, [phone]);
+
   if (!isOpen) return null;
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    // Allow digits and trim to max 10
+    const clean = val.replace(/\D/g, '').slice(0, 10);
+    setPhone(clean);
+  };
+
+  const handleContinue = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
 
-    const cleanPhone = phone.trim();
+    const cleanPhone = phone.replace(/\D/g, '').trim();
     const cleanFirstName = firstName.trim();
     const cleanLastName = lastName.trim();
 
-    if (!cleanPhone || !cleanFirstName || !cleanLastName || !password) {
-      setError('Please fill in First Name, Last Name, Phone Number, and Password.');
+    if (!cleanPhone || cleanPhone.length < 10) {
+      setError('Please enter a valid 10-digit mobile phone number.');
       return;
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+    if (!cleanFirstName) {
+      setError('Please enter your First Name.');
+      return;
+    }
+
+    if (!cleanLastName) {
+      setError('Please enter your Last Name.');
       return;
     }
 
     try {
       setLoading(true);
-      const res = await fetch('/api/auth/register', {
+      const res = await fetch('/api/auth/customer-login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -64,7 +105,6 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
           phone: cleanPhone,
           firstName: cleanFirstName,
           lastName: cleanLastName,
-          password,
         }),
       });
 
@@ -82,445 +122,155 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         const errorMsg =
           data?.error ||
           data?.message ||
-          (res.statusText ? `Registration error (${res.status}): ${res.statusText}` : 'Registration failed. Please try again.');
+          (res.statusText ? `Login error (${res.status}): ${res.statusText}` : 'Login failed. Please try again.');
         throw new Error(errorMsg);
       }
 
-      if (!data || !data.token) {
-        throw new Error('Server returned an invalid response format. Please try again.');
+      if (!data || !data.token || !data.user) {
+        throw new Error('Invalid response from server. Please try again.');
       }
 
-      onAuthSuccess(data.token, data.user);
-    } catch (err: any) {
-      setError(err.message || 'Failed to create account. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
-
-    const cleanPhone = phone.trim();
-    if (!cleanPhone || !password) {
-      setError('Please enter your registered phone number and password.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          phone: cleanPhone,
-          password,
-        }),
-      });
-
-      const responseText = await res.text();
-      let data: any = null;
-      if (responseText && responseText.trim().length > 0) {
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          data = null;
-        }
-      }
-
-      if (!res.ok) {
-        throw new Error(data?.error || 'Invalid phone number or password.');
-      }
-
-      if (!data || !data.token) {
-        throw new Error('Server returned an invalid login response. Please try again.');
-      }
-
-      onAuthSuccess(data.token, data.user);
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
-
-    const cleanPhone = phone.trim();
-    const cleanPin = privacyPin.trim();
-
-    if (!cleanPhone || !cleanPin || !newPassword) {
-      setError('Please provide phone number, your secret Privacy PIN, and new password.');
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      setError('New password must be at least 8 characters long.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const res = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          phone: cleanPhone,
-          privacyPin: cleanPin,
-          newPassword,
-        }),
-      });
-
-      const responseText = await res.text();
-      let data: any = null;
-      if (responseText && responseText.trim().length > 0) {
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          data = null;
-        }
-      }
-
-      if (!res.ok) {
-        throw new Error(data?.error || 'Password recovery failed.');
-      }
-
-      setSuccessMessage('Password reset successfully! You can now log in.');
-      setPassword(newPassword);
-      setNewPassword('');
+      setSuccessMessage('Welcome! Taking you to the menu...');
       setTimeout(() => {
-        setMode('login');
-        setSuccessMessage(null);
-      }, 1800);
+        onAuthSuccess(data.token, data.user);
+      }, 400);
     } catch (err: any) {
-      setError(err.message || 'Password reset failed.');
+      setError(err.message || 'Failed to proceed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-md bg-[#0f2a1b] border border-[#235836] rounded-2xl shadow-2xl text-[#fdfbf7] p-6 sm:p-8 my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="relative w-full max-w-md bg-[#0f2a1b] border border-[#235836] rounded-3xl shadow-2xl text-[#fdfbf7] p-6 sm:p-8 my-8">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-[#a6bfae] hover:text-[#fdfbf7] p-1.5 rounded-full hover:bg-[#1a442b] transition-colors cursor-pointer"
+          className="absolute top-4 right-4 text-[#a6bfae] hover:text-[#fdfbf7] p-2 rounded-full hover:bg-[#1a442b] transition-colors cursor-pointer"
+          aria-label="Close"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Header Branding */}
         <div className="text-center mb-6">
-          <div className="inline-block bg-[#163e26] border border-[#cba135]/50 px-3 py-1 rounded-full text-xs font-semibold text-[#dfb64c] uppercase tracking-wider mb-2">
-            Hotel Malabar Customer Portal
+          <div className="inline-flex items-center gap-1.5 bg-[#163e26] border border-[#cba135]/50 px-3 py-1 rounded-full text-xs font-semibold text-[#dfb64c] uppercase tracking-wider mb-3 shadow-sm">
+            <UtensilsCrossed className="w-3.5 h-3.5" />
+            <span>Hotel Malabar Customer Login</span>
           </div>
           <h2 className="font-brand text-2xl sm:text-3xl font-bold text-[#fcfaf6]">
-            {mode === 'register' && 'Create Account'}
-            {mode === 'login' && 'Customer Login'}
-            {mode === 'forgot' && 'Account Recovery'}
+            Welcome to Hotel Malabar
           </h2>
-          <p className="text-xs text-[#9bb5a4] mt-1">
-            {mode === 'register' && 'Register to unlock our complete Kerala menu and order online.'}
-            {mode === 'login' && 'Sign in using your registered phone number & password.'}
-            {mode === 'forgot' && 'Reset your password securely using your secret Privacy PIN.'}
+          <p className="text-xs sm:text-sm text-[#9bb5a4] mt-1.5 max-w-xs mx-auto">
+            Enter your mobile number and name to explore our authentic Kerala menu and place orders.
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex rounded-xl bg-[#091a10] p-1 mb-5 border border-[#1b432a]">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('register');
-              setError(null);
-            }}
-            className={`flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer ${
-              mode === 'register'
-                ? 'bg-[#dfb64c] text-[#0a1f13] shadow'
-                : 'text-[#a6bfae] hover:text-[#fdfbf7]'
-            }`}
-          >
-            Create Account
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode('login');
-              setError(null);
-            }}
-            className={`flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer ${
-              mode === 'login'
-                ? 'bg-[#dfb64c] text-[#0a1f13] shadow'
-                : 'text-[#a6bfae] hover:text-[#fdfbf7]'
-            }`}
-          >
-            Login
-          </button>
-        </div>
-
-        {/* Notification Banner */}
+        {/* Notification Banners */}
         {error && (
-          <div className="mb-4 p-3 rounded-xl bg-red-950/80 border border-red-800/80 text-red-200 text-xs flex items-start gap-2">
+          <div className="mb-4 p-3 rounded-xl bg-red-950/90 border border-red-800 text-red-200 text-xs flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
         )}
 
         {successMessage && (
-          <div className="mb-4 p-3 rounded-xl bg-emerald-950/80 border border-emerald-800/80 text-emerald-200 text-xs flex items-start gap-2">
+          <div className="mb-4 p-3 rounded-xl bg-emerald-950/90 border border-emerald-800 text-emerald-200 text-xs flex items-start gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <span>{successMessage}</span>
           </div>
         )}
 
-        {/* REGISTRATION FORM */}
-        {mode === 'register' && (
-          <form onSubmit={handleRegister} className="space-y-3.5">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-[#c9dcce] mb-1 font-medium">First Name</label>
-                <div className="relative">
-                  <User className="w-4 h-4 absolute left-3 top-3 text-[#799983]" />
-                  <input
-                    type="text"
-                    required
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="e.g. Rahul"
-                    className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-9 pr-3 py-2.5 text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
-                  />
+        {/* Customer Login Form: Phone Number -> First Name -> Last Name -> Continue -> Menu */}
+        <form onSubmit={handleContinue} className="space-y-4">
+          {/* 1. Phone Number */}
+          <div>
+            <label className="block text-xs text-[#c9dcce] mb-1.5 font-semibold">
+              Phone Number <span className="text-[#dfb64c]">*</span>
+            </label>
+            <div className="relative">
+              <div className="absolute left-3 top-3 flex items-center gap-1.5 text-[#dfb64c] pointer-events-none">
+                <Phone className="w-4 h-4" />
+                <span className="text-xs font-bold text-[#c9dcce] pl-0.5 border-r border-[#2d6240] pr-2">
+                  +91
+                </span>
+              </div>
+              <input
+                ref={phoneInputRef}
+                type="tel"
+                required
+                value={phone}
+                onChange={handlePhoneChange}
+                placeholder="10-digit mobile number"
+                className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-20 pr-3 py-3 text-sm font-medium text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c] tracking-wide"
+                maxLength={10}
+              />
+              {lookupLoading && (
+                <div className="absolute right-3 top-3.5 text-[11px] text-[#dfb64c] animate-pulse">
+                  Checking...
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs text-[#c9dcce] mb-1 font-medium">Last Name</label>
-                <input
-                  type="text"
-                  required
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="e.g. Nair"
-                  className="w-full bg-[#123620] border border-[#245937] rounded-xl px-3 py-2.5 text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
-                />
-              </div>
+              )}
             </div>
+            <p className="text-[11px] text-[#7da088] mt-1">
+              Your registered mobile number for order updates & delivery delivery.
+            </p>
+          </div>
 
-            <div>
-              <label className="block text-xs text-[#c9dcce] mb-1 font-medium">Phone Number (Unique ID)</label>
-              <div className="relative">
-                <Phone className="w-4 h-4 absolute left-3 top-3 text-[#799983]" />
-                <input
-                  type="tel"
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="10-digit mobile number"
-                  className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-9 pr-3 py-2.5 text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
-                />
-              </div>
+          {/* 2. First Name */}
+          <div>
+            <label className="block text-xs text-[#c9dcce] mb-1.5 font-semibold">
+              First Name <span className="text-[#dfb64c]">*</span>
+            </label>
+            <div className="relative">
+              <User className="w-4 h-4 absolute left-3 top-3 text-[#799983]" />
+              <input
+                type="text"
+                required
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="e.g. Rahul"
+                className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-9 pr-3 py-3 text-sm font-medium text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
+              />
             </div>
+          </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs text-[#c9dcce] font-medium">Password (Min 8 Chars)</label>
-                <span className="text-[10px] text-[#8fa897]">Securely Hashed</span>
-              </div>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-3 text-[#799983]" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  minLength={8}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 8 characters"
-                  className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-9 pr-10 py-2.5 text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-[#799983] hover:text-[#fdfbf7]"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+          {/* 3. Last Name */}
+          <div>
+            <label className="block text-xs text-[#c9dcce] mb-1.5 font-semibold">
+              Last Name <span className="text-[#dfb64c]">*</span>
+            </label>
+            <div className="relative">
+              <User className="w-4 h-4 absolute left-3 top-3 text-[#799983]" />
+              <input
+                type="text"
+                required
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="e.g. Nair"
+                className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-9 pr-3 py-3 text-sm font-medium text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
+              />
             </div>
+          </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-[#dfb64c] to-[#cba135] text-[#0a1f13] font-bold py-3 px-4 rounded-xl shadow-lg hover:from-[#e7c35d] hover:to-[#d4af37] transition-all cursor-pointer mt-2 disabled:opacity-50"
-            >
-              {loading ? 'Creating Account...' : 'Complete Registration & Access Menu'}
-            </button>
-          </form>
-        )}
+          {/* 4. Continue -> Menu Button */}
+          <button
+            id="customer-login-continue-btn"
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-[#dfb64c] to-[#cba135] hover:from-[#e7c35d] hover:to-[#d4af37] text-[#0a1f13] font-bold text-base py-3.5 px-4 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 cursor-pointer mt-4 disabled:opacity-50"
+          >
+            <span>{loading ? 'Connecting to Menu...' : 'Continue'}</span>
+            <ArrowRight className="w-5 h-5" />
+          </button>
+        </form>
 
-        {/* LOGIN FORM */}
-        {mode === 'login' && (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs text-[#c9dcce] mb-1 font-medium">Registered Phone Number</label>
-              <div className="relative">
-                <Phone className="w-4 h-4 absolute left-3 top-3 text-[#799983]" />
-                <input
-                  type="tel"
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Enter phone number"
-                  className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-9 pr-3 py-2.5 text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs text-[#c9dcce] font-medium">Main Password</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('forgot');
-                    setError(null);
-                  }}
-                  className="text-xs text-[#dfb64c] hover:underline cursor-pointer"
-                >
-                  Forgot Password?
-                </button>
-              </div>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-3 text-[#799983]" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-9 pr-10 py-2.5 text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-[#799983] hover:text-[#fdfbf7]"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-[#dfb64c] to-[#cba135] text-[#0a1f13] font-bold py-3 px-4 rounded-xl shadow-lg hover:from-[#e7c35d] hover:to-[#d4af37] transition-all cursor-pointer disabled:opacity-50 mt-2"
-            >
-              {loading ? 'Authenticating...' : 'Sign In & View Menu'}
-            </button>
-          </form>
-        )}
-
-        {/* FORGOT PASSWORD FORM (NON-OTP) */}
-        {mode === 'forgot' && (
-          <form onSubmit={handleResetPassword} className="space-y-4">
-            <div className="p-3 bg-[#11321e] border border-[#204e33] rounded-xl text-xs text-[#c9dcce]">
-              <strong>Non-OTP Recovery:</strong> Enter your registered phone number and the separate Privacy PIN you created during registration to set a new password.
-            </div>
-
-            <div>
-              <label className="block text-xs text-[#c9dcce] mb-1 font-medium">Registered Phone Number</label>
-              <div className="relative">
-                <Phone className="w-4 h-4 absolute left-3 top-3 text-[#799983]" />
-                <input
-                  type="tel"
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="10-digit mobile number"
-                  className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-9 pr-3 py-2.5 text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs text-[#dfb64c] mb-1 font-medium">Your Secret Privacy PIN</label>
-              <div className="relative">
-                <KeyRound className="w-4 h-4 absolute left-3 top-3 text-[#dfb64c]" />
-                <input
-                  type={showPin ? 'text' : 'password'}
-                  required
-                  value={privacyPin}
-                  onChange={(e) => setPrivacyPin(e.target.value)}
-                  placeholder="Enter your Privacy PIN"
-                  className="w-full bg-[#123620] border border-[#dfb64c]/50 rounded-xl pl-9 pr-10 py-2.5 text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3 top-2.5 text-[#799983] hover:text-[#fdfbf7]"
-                >
-                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs text-[#c9dcce] mb-1 font-medium">New Password (Min 8 chars)</label>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-3 text-[#799983]" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  minLength={8}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Enter new strong password"
-                  className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-9 pr-10 py-2.5 text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-[#799983] hover:text-[#fdfbf7]"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setMode('login')}
-                className="flex-1 bg-[#123620] text-[#c9dcce] py-2.5 rounded-xl border border-[#245937] text-xs font-semibold hover:bg-[#184428] cursor-pointer"
-              >
-                Back to Login
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 bg-[#dfb64c] text-[#0a1f13] py-2.5 rounded-xl text-xs font-bold hover:bg-[#ebd06b] cursor-pointer disabled:opacity-50"
-              >
-                {loading ? 'Verifying...' : 'Reset Password'}
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Security badge footer */}
-        <div className="mt-6 pt-4 border-t border-[#1b432a] flex items-center justify-center gap-2 text-[11px] text-[#8fa897]">
-          <ShieldCheck className="w-3.5 h-3.5 text-[#dfb64c]" />
-          <span>Bcrypt Encrypted • Strict Non-OTP Architecture</span>
+        {/* Footer info note */}
+        <div className="mt-6 pt-4 border-t border-[#1b432a] text-center text-[11px] text-[#8fa897]">
+          <span>Cash on Delivery Only • Bommasandra & Surrounding Areas</span>
         </div>
       </div>
     </div>
   );
 };
+
