@@ -38,6 +38,12 @@ admin = admin.replace("const configured = Boolean(data?.isConfigured);", "const 
 admin = admin.replace("fetch('/api/admin/status', {", "fetch('/api/admin/me', {");
 admin = admin.replace(/9567562071/g, 'REMOVED_ADMIN_PHONE');
 admin = admin.replace(/admin123/g, 'REMOVED_ADMIN_PASSWORD');
+
+// Safety guard: never allow the known legacy hardcoded admin credentials or
+// auto-login function to reach a production build again.
+if (/performAutoAdminLogin|9567562071|admin123/.test(admin)) {
+  throw new Error('Security guard: legacy hardcoded admin auto-login remains in AdminDashboard.tsx');
+}
 fs.writeFileSync(adminFile, admin, 'utf8');
 
 // AIC App Hosting may start dist/server.cjs directly instead of using our wrapper.
@@ -71,4 +77,4 @@ replaceOnce(
   "  public reloadFromDisk(): void {\n    try {\n      if (!fs.existsSync(DATA_FILE)) return;\n      const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));\n      if (!parsed || !Array.isArray(parsed.users) || !Array.isArray(parsed.orders)) return;\n      this.data = parsed as DatabaseData;\n      this.menuCache = null;\n      this.version++;\n    } catch (error) {\n      console.error('Failed to reload database from disk:', error);\n    }\n  }\n\n  public getVersion(): number {\n    return this.version;\n  }"
 );
 
-console.log('Hotel Malabar AIC build fixes and Supabase order sync applied.');
+console.log('Hotel Malabar AIC build fixes, Supabase order sync, and admin security guard applied.');
