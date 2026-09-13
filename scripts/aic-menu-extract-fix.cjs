@@ -46,7 +46,7 @@ if (!source.includes("app.post('/api/admin/menu/items/batch'")) {
     "app.post('/api/admin/menu/items/batch', requireAdminAuth, async (req: Request, res: Response) => {",
     '  try {',
     '    const items = Array.isArray(req.body?.items) ? req.body.items : [];',
-    "    if (items.length === 0) {",
+    '    if (items.length === 0) {',
     "      return res.status(400).json({ error: 'No menu items provided.' });",
     '    }',
     '',
@@ -58,7 +58,7 @@ if (!source.includes("app.post('/api/admin/menu/items/batch'")) {
     '',
     '      return db.addMenuItem({',
     '        ...item,',
-    '        name,',
+        '        name,',
     "        categoryId: String(item?.categoryId || '').trim(),",
     '        price: Number.isFinite(Number(item?.price)) && Number(item.price) >= 0 ? Number(item.price) : 0,',
     "        description: typeof item?.description === 'string' ? item.description.trim() : '',",
@@ -85,6 +85,18 @@ if (!source.includes("app.post('/api/admin/menu/items/batch'")) {
 
 if (routes.length > 0) {
   source = source.replace(marker, routes.join('') + marker);
+}
+
+// The previous Gemini model can return temporary 503 high-demand errors.
+// Use the stable Flash model for production menu OCR instead of changing any
+// customer/admin behavior or menu data logic.
+const geminiFile = 'server/gemini.ts';
+let geminiSource = fs.readFileSync(geminiFile, 'utf8');
+geminiSource = geminiSource.replace(/model:\s*'gemini-3\.8-flash'/g, "model: 'gemini-2.5-flash'");
+fs.writeFileSync(geminiFile, geminiSource, 'utf8');
+console.log('AIC Gemini menu OCR model set to stable gemini-2.5-flash.');
+
+if (routes.length > 0) {
   fs.writeFileSync(file, source, 'utf8');
   console.log(`AIC menu API fixes added: ${routes.length} route(s).`);
 } else {
