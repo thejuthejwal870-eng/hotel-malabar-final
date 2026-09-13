@@ -8,9 +8,11 @@ if (!source.includes(marker)) {
   throw new Error('Gemini resilience fix could not find extractMenuItemsFromPhotos in server/gemini.ts');
 }
 
-// Always replace the generated helper so deployments get the latest timeout
-// and fallback behavior. This keeps AI Menu Card extraction from spinning
-// indefinitely when a Gemini request is slow or temporarily unavailable.
+// Remove a previously generated helper if present, then insert the current
+// bounded version. The source file itself remains clean; this is applied at
+// build time by the AIC deployment build script.
+source = source.replace(/async function generateMenuContentWithFallback\([\s\S]*?\n}\n\n(?=export async function extractMenuItemsFromPhotos)/m, '');
+
 const helper = `async function generateMenuContentWithFallback(ai: GoogleGenAI, request: any) {
   // Try a small set of stable Flash models. Each individual request has a
   // hard timeout so the browser never waits indefinitely.
@@ -68,14 +70,15 @@ const helper = `async function generateMenuContentWithFallback(ai: GoogleGenAI, 
 
 `;
 
-// Remove any previous generated helper before inserting the current one.
-source = source.replace(/async function generateMenuContentWithFallback\([\s\S]*?\n}\n\n(?=export async function extractMenuItemsFromPhotos)/m, '');
 source = source.replace(marker, helper + marker);
 
-// Route all extraction calls through the bounded helper.
+const directCall = 'const response = await ai.models.generateContent({';
+if (!source.includes(directCall)) {
+  throw new Error('Gemini extraction generateContent call was not found.');
+}
 source = source.replace(
-  /const response = await (?:generateMenuContentWithFallback\(ai, \{[\s\S]*?\}\)|ai\.models\.generateContent\(\{[\s\S]*?\}\));/m,
-  'const response = await generateMenuContentWithFallback(ai, {\n    contents: [\n      ...imageParts,\n      { text: promptText },\n    ],\n    config: {\n      responseMimeType: \'application/json\',\n      responseSchema: {\n        type: Type.ARRAY,\n        description: \'List of extracted food and drink items from the menu card photos\',\n        items: {\n          type: Type.OBJECT,\n          properties: {\n            name: { type: Type.STRING, description: \'The exact food or beverage item name\' },\n            categoryId: { type: Type.STRING, description: \'The category ID from the provided list\' },\n            price: { type: Type.NUMBER, description: \'Numeric price if readable, otherwise 0 or null\' },\n            isVeg: { type: Type.BOOLEAN, description: \'True if vegetarian, false if non-vegetarian\' },\n            description: { type: Type.STRING, description: \'Short 1-sentence description or empty string\' },\n          },\n          required: [\'name\', \'categoryId\', \'isVeg\'],\n        },\n      },\n    },\n  });'
+  directCall,
+  'const response = await generateMenuContentWithFallback(ai, {'
 );
 
 fs.writeFileSync(file, source, 'utf8');
