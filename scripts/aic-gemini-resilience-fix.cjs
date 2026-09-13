@@ -8,18 +8,16 @@ if (!source.includes(marker)) {
   throw new Error('Gemini resilience fix could not find extractMenuItemsFromPhotos in server/gemini.ts');
 }
 
-// Remove a previously generated helper if present, then insert the current
-// bounded version. The source file itself remains clean; this is applied at
-// build time by the AIC deployment build script.
 source = source.replace(/async function generateMenuContentWithFallback\([\s\S]*?\n}\n\n(?=export async function extractMenuItemsFromPhotos)/m, '');
 
 const helper = `async function generateMenuContentWithFallback(ai: GoogleGenAI, request: any) {
-  // Try a small set of stable Flash models. Each individual request has a
-  // hard timeout so the browser never waits indefinitely.
+  // Use fast/low-thinking Gemini 3 Flash models for OCR, with automatic
+  // fallback when a model is temporarily unavailable or rate-limited.
   const models = [
     'gemini-3.8-flash',
     'gemini-3.7-flash',
     'gemini-3.6-flash',
+    'gemini-3.5-flash',
   ];
 
   let lastError: any = null;
@@ -29,12 +27,18 @@ const helper = `async function generateMenuContentWithFallback(ai: GoogleGenAI, 
       const requestPromise = ai.models.generateContent({
         ...request,
         model,
+        config: {
+          ...(request.config || {}),
+          thinkingConfig: {
+            thinkingLevel: 'low',
+          },
+        },
       });
 
       const response = await Promise.race([
         requestPromise,
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(\`Gemini request timed out for model \${model}.\`)), 40000)
+          setTimeout(() => reject(new Error(\`Gemini request timed out for model \${model}.\`)), 30000)
         ),
       ]);
 
@@ -58,7 +62,7 @@ const helper = `async function generateMenuContentWithFallback(ai: GoogleGenAI, 
         throw err;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 
@@ -82,4 +86,4 @@ source = source.replace(
 );
 
 fs.writeFileSync(file, source, 'utf8');
-console.log('Gemini OCR bounded timeout and 3-model fallback enabled.');
+console.log('Gemini OCR low-thinking mode, bounded timeout, and stable Flash fallbacks enabled.');
