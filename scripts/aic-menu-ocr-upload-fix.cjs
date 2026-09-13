@@ -1,9 +1,9 @@
 const fs = require('fs');
 
 // The AI Menu Card modal previously sent all selected photos in one large
-// request. Ten menu photos can exceed the hosting/proxy body limit or make the
-// browser report only "Failed to fetch". Send small batches instead, then merge
-// the extracted items before showing the preview.
+// request. Ten high-resolution menu photos can exceed the hosting/proxy body
+// limit or make the browser report only "Failed to fetch". Send small batches
+// instead, then merge the extracted items before showing the preview.
 const componentFile = 'src/components/MenuCardImportModal.tsx';
 let component = fs.readFileSync(componentFile, 'utf8');
 
@@ -22,29 +22,46 @@ const replacement = `      // 2. Call server endpoint in small batches so multip
         adminToken ||
         (typeof window !== 'undefined' ? localStorage.getItem('hm_admin_token') : null);
 
+      if (!token) {
+        throw new Error('Admin session expired. Please login to the Admin Panel again.');
+      }
+
       const allExtractedItems: any[] = [];
       const BATCH_SIZE = 2;
 
       for (let batchStart = 0; batchStart < preparedImages.length; batchStart += BATCH_SIZE) {
         const imageBatch = preparedImages.slice(batchStart, batchStart + BATCH_SIZE);
 
-        const res = await fetch('/api/admin/menu/extract-photos', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: \`Bearer \${token}\`,
-          },
-          body: JSON.stringify({ images: imageBatch }),
-        });
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 90000);
 
-        const data = await res.json().catch(() => ({}));
+        try {
+          const res = await fetch('/api/admin/menu/extract-photos', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: \`Bearer \${token}\`,
+            },
+            body: JSON.stringify({ images: imageBatch }),
+            signal: controller.signal,
+          });
 
-        if (!res.ok) {
-          throw new Error(data.error || \`AI extraction failed for photo batch \${Math.floor(batchStart / BATCH_SIZE) + 1}.\`);
-        }
+          const data = await res.json().catch(() => ({}));
 
-        if (Array.isArray(data.items)) {
-          allExtractedItems.push(...data.items);
+          if (!res.ok) {
+            throw new Error(data.error || \`AI extraction failed for photo batch \${Math.floor(batchStart / BATCH_SIZE) + 1}.\`);
+          }
+
+          if (Array.isArray(data.items)) {
+            allExtractedItems.push(...data.items);
+          }
+        } catch (err: any) {
+          if (err?.name === 'AbortError') {
+            throw new Error(\`AI extraction timed out on photo batch \${Math.floor(batchStart / BATCH_SIZE) + 1}. Please try again.\`);
+          }
+          throw err;
+        } finally {
+          window.clearTimeout(timeoutId);
         }
       }
 
@@ -54,12 +71,12 @@ const replacement = `      // 2. Call server endpoint in small batches so multip
 
 component = component.slice(0, start) + replacement + component.slice(end);
 fs.writeFileSync(componentFile, component, 'utf8');
-console.log('AIC menu OCR upload batching enabled (2 photos per request) with admin token preserved.');
+console.log('AIC menu OCR upload batching enabled with admin-token validation and 90s request timeout.');
 
 // Keep Gemini 3.8 Flash as the primary production model. The resilience
-// helper already provides automatic fallback to other stable Gemini 3 models.
+// helper provides automatic fallback to other stable Gemini 3 models.
 const geminiFixFile = 'scripts/aic-menu-extract-fix.cjs';
 let geminiFix = fs.readFileSync(geminiFixFile, 'utf8');
-geminiFix = geminiFix.replace(/gemini-2\.5-flash/g, 'gemini-3.8-flash');
+geminiFix = geminiFix.replace(/gemini-2\\.5-flash/g, 'gemini-3.8-flash');
 fs.writeFileSync(geminiFixFile, geminiFix, 'utf8');
 console.log('AIC menu OCR primary model restored to gemini-3.8-flash.');
