@@ -1,9 +1,9 @@
 const fs = require('fs');
 
 // The AI Menu Card modal previously sent all selected photos in one large
-// request. Ten high-resolution menu photos can exceed the hosting/proxy body
-// limit or make the browser report only "Failed to fetch". Send small batches
-// instead, then merge the extracted items before showing the preview.
+// request. Ten menu photos can exceed the hosting/proxy body limit or make the
+// browser report only "Failed to fetch". Send small batches instead, then merge
+// the extracted items before showing the preview.
 const componentFile = 'src/components/MenuCardImportModal.tsx';
 let component = fs.readFileSync(componentFile, 'utf8');
 
@@ -18,6 +18,10 @@ if (start === -1 || end === -1) {
 
 const replacement = `      // 2. Call server endpoint in small batches so multiple menu photos
       // never create one oversized HTTP request.
+      const token =
+        adminToken ||
+        (typeof window !== 'undefined' ? localStorage.getItem('hm_admin_token') : null);
+
       const allExtractedItems: any[] = [];
       const BATCH_SIZE = 2;
 
@@ -50,7 +54,7 @@ const replacement = `      // 2. Call server endpoint in small batches so multip
 
 component = component.slice(0, start) + replacement + component.slice(end);
 fs.writeFileSync(componentFile, component, 'utf8');
-console.log('AIC menu OCR upload batching enabled (2 photos per request).');
+console.log('AIC menu OCR upload batching enabled (2 photos per request) with admin token preserved.');
 
 // Keep Gemini 3.8 Flash as the primary production model. The resilience
 // helper already provides automatic fallback to other stable Gemini 3 models.
