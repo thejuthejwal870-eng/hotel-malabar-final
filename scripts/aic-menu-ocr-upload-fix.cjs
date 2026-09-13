@@ -1,11 +1,11 @@
 const fs = require('fs');
 
-// The AI Menu Card modal previously sent all selected photos in one large
-// request. Ten high-resolution menu photos can exceed the hosting/proxy body
-// limit or make the browser report only "Failed to fetch". Send small batches
-// instead, then merge the extracted items before showing the preview.
 const componentFile = 'src/components/MenuCardImportModal.tsx';
 let component = fs.readFileSync(componentFile, 'utf8');
+
+// OCR-only preprocessing: smaller images reduce proxy/body pressure and Gemini latency.
+component = component.replace('const MAX_DIM = 1800;', 'const MAX_DIM = 1200;');
+component = component.replace("canvas.toDataURL('image/jpeg', 0.88)", "canvas.toDataURL('image/jpeg', 0.72)");
 
 const startMarker = '      // 2. Call server endpoint';
 const endMarker = '      // 3. Map extracted items to draft state';
@@ -16,8 +16,9 @@ if (start === -1 || end === -1) {
   throw new Error('Could not locate AI menu extraction request block in MenuCardImportModal.tsx');
 }
 
-const replacement = `      // 2. Call server endpoint in small batches so multiple menu photos
-      // never create one oversized HTTP request.
+const replacement = `      // 2. Send one OCR photo per request with limited concurrency.
+      // This avoids large requests and prevents a long serial queue from
+      // making the browser report only "Failed to fetch".
       const token =
         adminToken ||
         (typeof window !== 'undefined' ? localStorage.getItem('hm_admin_token') : null);
@@ -27,13 +28,13 @@ const replacement = `      // 2. Call server endpoint in small batches so multip
       }
 
       const allExtractedItems: any[] = [];
-      const BATCH_SIZE = 2;
+      const BATCH_SIZE = 1;
+      const MAX_CONCURRENT = 3;
+      let nextIndex = 0;
 
-      for (let batchStart = 0; batchStart < preparedImages.length; batchStart += BATCH_SIZE) {
-        const imageBatch = preparedImages.slice(batchStart, batchStart + BATCH_SIZE);
-
+      const extractOne = async (batchIndex: number, imageBatch: any[]) => {
         const controller = new AbortController();
-        const timeoutId = window.setTimeout(() => controller.abort(), 90000);
+        const timeoutId = window.setTimeout(() => controller.abort(), 60000);
 
         try {
           const res = await fetch('/api/admin/menu/extract-photos', {
@@ -47,9 +48,8 @@ const replacement = `      // 2. Call server endpoint in small batches so multip
           });
 
           const data = await res.json().catch(() => ({}));
-
           if (!res.ok) {
-            throw new Error(data.error || \`AI extraction failed for photo batch \${Math.floor(batchStart / BATCH_SIZE) + 1}.\`);
+            throw new Error(data.error || \`AI extraction failed for photo \${batchIndex + 1}.\`);
           }
 
           if (Array.isArray(data.items)) {
@@ -57,13 +57,28 @@ const replacement = `      // 2. Call server endpoint in small batches so multip
           }
         } catch (err: any) {
           if (err?.name === 'AbortError') {
-            throw new Error(\`AI extraction timed out on photo batch \${Math.floor(batchStart / BATCH_SIZE) + 1}. Please try again.\`);
+            throw new Error(\`AI extraction timed out on photo \${batchIndex + 1}. Please try again.\`);
           }
           throw err;
         } finally {
           window.clearTimeout(timeoutId);
         }
-      }
+      };
+
+      const worker = async () => {
+        while (true) {
+          const index = nextIndex++;
+          if (index >= preparedImages.length) return;
+          await extractOne(index, preparedImages.slice(index, index + BATCH_SIZE));
+        }
+      };
+
+      await Promise.all(
+        Array.from(
+          { length: Math.min(MAX_CONCURRENT, preparedImages.length) },
+          () => worker()
+        )
+      );
 
       const data = { items: allExtractedItems };
 
@@ -71,12 +86,7 @@ const replacement = `      // 2. Call server endpoint in small batches so multip
 
 component = component.slice(0, start) + replacement + component.slice(end);
 fs.writeFileSync(componentFile, component, 'utf8');
-console.log('AIC menu OCR upload batching enabled with admin-token validation and 90s request timeout.');
+console.log('AIC menu OCR fixed: 1200px/0.72 JPEG, one photo per request, max 3 concurrent requests, 60s timeout.');
 
-// Keep Gemini 3.8 Flash as the primary production model. The resilience
-// helper provides automatic fallback to other stable Gemini 3 models.
-const geminiFixFile = 'scripts/aic-menu-extract-fix.cjs';
-let geminiFix = fs.readFileSync(geminiFixFile, 'utf8');
-geminiFix = geminiFix.replace(/gemini-2\\.5-flash/g, 'gemini-3.8-flash');
-fs.writeFileSync(geminiFixFile, geminiFix, 'utf8');
-console.log('AIC menu OCR primary model restored to gemini-3.8-flash.');
+// Keep the current primary model selection controlled by the Gemini resilience
+// script. Do not rewrite model IDs here.
