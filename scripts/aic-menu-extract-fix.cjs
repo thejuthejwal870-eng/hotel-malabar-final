@@ -46,7 +46,7 @@ if (!source.includes("app.post('/api/admin/menu/items/batch'")) {
     "app.post('/api/admin/menu/items/batch', requireAdminAuth, async (req: Request, res: Response) => {",
     '  try {',
     '    const items = Array.isArray(req.body?.items) ? req.body.items : [];',
-    '    if (items.length === 0) {',
+    "    if (items.length === 0) {",
     "      return res.status(400).json({ error: 'No menu items provided.' });",
     '    }',
     '',
