@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "node scripts/aic-build-fix.cjs && node scripts/aic-separation-fix.cjs && node scripts/aic-gemini-resilience-fix.cjs && node scripts/aic-menu-extract-fix.cjs && node scripts/aic-menu-ocr-upload-fix.cjs && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/app.cjs && node scripts/aic-write-entry.cjs",
+    "build": "node scripts/aic-build-fix.cjs && node scripts/aic-separation-fix.cjs && node scripts/aic-gemini-resilience-fix.cjs && node scripts/aic-menu-extract-fix.cjs && node scripts/aic-menu-ocr-upload-fix.cjs && node scripts/aic-menu-route-fix.cjs && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/app.cjs && node scripts/aic-write-entry.cjs",
     "start": "NODE_ENV=production node server/aic-start.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
@@ -30,8 +30,10 @@
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.14.0",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
     "autoprefixer": "^10.4.21",
-    "tailwindcss": "^4.1.14",
+    "tailwindcss": "^4.1.2",
     "typescript": "~5.8.2"
   }
 }
