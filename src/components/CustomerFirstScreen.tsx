@@ -1,5 +1,5 @@
 import React from 'react';
-import { Phone, ShieldCheck, Truck, UtensilsCrossed, Clock, ChevronRight, ArrowRight } from 'lucide-react';
+import { Phone, ShieldCheck, Truck, UtensilsCrossed, Clock, ChevronRight, ArrowRight, MapPin } from 'lucide-react';
 import { RestaurantProfile } from '../types';
 import { WatermarkedImage } from './WatermarkedImage';
 
@@ -18,122 +18,103 @@ export const CustomerFirstScreen: React.FC<CustomerFirstScreenProps> = ({ restau
   const phone2 = restaurantProfile?.phones?.[1] || '8904634717';
   const isOnlineOpen = restaurantProfile?.isOnlineOrderOpen !== false;
 
-  const navClass = 'px-5 py-2.5 rounded-full border border-[#6d9b83] bg-white text-[#123d27] font-semibold hover:border-[#d6ae3a] hover:text-[#b28718] transition-all shadow-sm';
+  const categories = [
+    ['Biryani', 'Authentic Flavours'],
+    ['Tandoori', 'Grilled Perfection'],
+    ['Shawarma', 'Fresh & Juicy'],
+    ['Chinese', 'Wok Favourites'],
+    ['Breakfast', 'Start Fresh'],
+    ['Meals', 'Traditional Taste'],
+  ];
 
   return (
-    <div className="min-h-screen bg-[#fffefa] text-[#14231a] font-sans overflow-x-hidden">
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_80%_18%,rgba(219,236,225,.55),transparent_34%),radial-gradient(circle_at_10%_82%,rgba(245,239,220,.45),transparent_32%)]" />
-
-      <header className="relative z-10 border-b border-[#e3e8e2] bg-white/95 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm">
-          <div className="flex items-center gap-2 text-[#34443a]">
-            <span className={`w-2.5 h-2.5 rounded-full ${isOnlineOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-            <span className="font-bold text-[#b28718]">{isOnlineOpen ? 'Orders Open' : 'Orders Closed'}</span>
-            <span className="text-[#9aaa9f]">|</span>
+    <div className="hm-landing min-h-screen bg-[#06160c] text-[#fcfaf6] overflow-x-hidden">
+      <header className="relative z-20 border-b border-[#204d32] bg-[#071b10]/95 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-center justify-between gap-3 text-[10px] sm:text-xs">
+          <div className="flex items-center gap-2 text-[#d8e2db]">
+            <span className={`w-2 h-2 rounded-full ${isOnlineOpen ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+            <span className="font-bold text-[#dfb64c]">{isOnlineOpen ? 'Orders Open' : 'Orders Closed'}</span>
+            <span className="text-[#6d8c77]">•</span>
             <span>Cash on Delivery Only</span>
           </div>
-          <a href={`tel:${phone1}`} className="flex items-center gap-2 text-[#34443a] hover:text-[#b28718] transition-colors">
-            <Phone className="w-4 h-4 text-[#d0a52c]" /> <span>{phone1}</span>
-          </a>
+          <a href={`tel:${phone1}`} className="flex items-center gap-1.5 text-[#d8e2db] hover:text-[#dfb64c]"><Phone className="w-3 h-3 text-[#dfb64c]" />{phone1}</a>
         </div>
       </header>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-5">
-        <div className="flex items-center gap-3">
-          {logoPhoto ? (
-            <div className="w-14 h-14 rounded-2xl overflow-hidden border border-[#d6ae3a] bg-[#f8f7f2] shadow-lg">
-              <WatermarkedImage src={logoPhoto} alt={restaurantName} className="w-full h-full" watermarkSize="sm" />
-            </div>
-          ) : (
-            <div className="w-14 h-14 rounded-2xl border border-[#d6ae3a] bg-[#f8f7f2] flex items-center justify-center shadow-lg">
-              <UtensilsCrossed className="w-7 h-7 text-[#0c4b2a]" />
-            </div>
-          )}
-          <div>
-            <div className="font-brand text-xl sm:text-2xl font-bold tracking-wide text-[#123d27]">{restaurantName}</div>
-            <div className="text-[10px] tracking-[0.28em] uppercase text-[#c39a2d]">Taste of Kerala</div>
+      <nav className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl overflow-hidden border border-[#d6ae3a] bg-[#f7f3e9] shrink-0 shadow-lg">
+            {logoPhoto ? <WatermarkedImage src={logoPhoto} alt={restaurantName} className="w-full h-full" watermarkSize="sm" /> : <div className="w-full h-full flex items-center justify-center"><UtensilsCrossed className="w-5 h-5 text-[#0b4a2a]" /></div>}
+          </div>
+          <div className="min-w-0">
+            <div className="font-brand text-base sm:text-lg tracking-wide truncate">{restaurantName}</div>
+            <div className="text-[8px] uppercase tracking-[0.22em] text-[#d7b24c] truncate">GOOD FOOD • BETTER MOODS</div>
           </div>
         </div>
-        <nav aria-label="Hotel Malabar" className="flex flex-wrap justify-center gap-2">
-          <a href="/menu.html" className={navClass}>Menu</a>
-          <a href="/contact.html" className={navClass}>Contact Us</a>
-          <a href="/about.html" className={navClass}>About Us</a>
-          <a href="/gallery.html" className={navClass}>Gallery</a>
-          <button onClick={onLogin} className="px-5 py-2.5 rounded-full bg-[#e0b53f] text-[#0b2c1b] font-bold hover:bg-[#ebc95d] transition-all shadow-lg">Login</button>
-        </nav>
-      </div>
+        <div className="hidden md:flex items-center gap-1.5 text-[11px] font-semibold">
+          <a href="/" className="px-3 py-1.5 rounded-lg text-[#dfb64c] bg-[#123620]">Home</a>
+          <a href="/menu.html" className="px-3 py-1.5 rounded-lg text-[#d9e4dc] hover:text-[#dfb64c]">Menu</a>
+          <a href="/about.html" className="px-3 py-1.5 rounded-lg text-[#d9e4dc] hover:text-[#dfb64c]">About</a>
+          <a href="/contact.html" className="px-3 py-1.5 rounded-lg text-[#d9e4dc] hover:text-[#dfb64c]">Contact</a>
+          <a href="/gallery.html" className="px-3 py-1.5 rounded-lg text-[#d9e4dc] hover:text-[#dfb64c]">Gallery</a>
+          <button onClick={onLogin} className="ml-1 px-4 py-1.5 rounded-lg border border-[#d6ae3a] text-[#f4df9b] hover:bg-[#dfb64c] hover:text-[#082013] transition-all">Login</button>
+        </div>
+        <button onClick={onLogin} className="md:hidden px-3.5 py-1.5 rounded-lg border border-[#d6ae3a] text-[#f4df9b] text-[11px] font-bold">Login</button>
+      </nav>
 
-      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6">
-        <section className="relative overflow-hidden rounded-[2rem] border border-[#e3dac4] bg-white shadow-xl min-h-[560px] flex items-center">
-          <div className="absolute inset-0 bg-gradient-to-r from-white via-white/95 to-white/10 z-10" />
-          <div className="absolute right-0 top-0 bottom-0 w-full md:w-[62%]">
+      <main className="relative z-10 max-w-7xl mx-auto px-3 sm:px-6 pb-7">
+        <section className="relative overflow-hidden rounded-[1.25rem] sm:rounded-[1.5rem] border border-[#d2aa42]/40 bg-[#0b2416] min-h-[390px] sm:min-h-[450px] flex items-center shadow-[0_22px_60px_rgba(0,0,0,.34)]">
+          <div className="absolute inset-0 bg-gradient-to-r from-[#06160c] via-[#071b10]/95 to-transparent z-10" />
+          <div className="absolute inset-y-0 right-0 w-full md:w-[64%]">
             <WatermarkedImage src={coverPhoto} alt={`${restaurantName} signature food`} className="w-full h-full object-cover" watermarkSize="md" />
-            <div className="absolute inset-0 bg-gradient-to-r from-white via-white/55 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#06160c] via-[#06160c]/70 to-transparent" />
           </div>
-
-          <div className="relative z-20 max-w-2xl px-7 sm:px-12 py-14">
-            <p className="text-[#c39a2d] uppercase tracking-[0.28em] text-sm font-semibold mb-4">Authentic Kerala Cuisine</p>
-            <h1 className="font-brand uppercase leading-[.9] mb-6">
-              <span className="block text-5xl sm:text-7xl text-[#123d27]">Hotel</span>
-              <span className="block text-5xl sm:text-7xl text-[#d3a52f]">Malabar</span>
-            </h1>
-            <div className="h-px w-28 bg-[#d8b13e] mb-6" />
-            <p className="text-base sm:text-lg text-[#39463f] leading-8 max-w-xl mb-8">{tagline}</p>
-            <div className="flex flex-wrap gap-3">
-              <button onClick={onCreateAccount} className="inline-flex items-center gap-2 bg-[#dfb449] text-[#082013] font-bold px-7 py-3.5 rounded-xl hover:bg-[#e8c45a] transition-all shadow-xl">
-                Order Online <ArrowRight className="w-5 h-5" />
-              </button>
-              <button onClick={onLogin} className="inline-flex items-center gap-2 border border-[#1c5a3a] text-[#123d27] px-7 py-3.5 rounded-xl hover:bg-[#edf5ef] transition-all">
-                Login to Order
-              </button>
+          <div className="relative z-20 w-full max-w-xl px-5 py-10 sm:px-9 sm:py-12">
+            <div className="inline-flex items-center gap-2 text-[9px] sm:text-[10px] uppercase tracking-[0.24em] text-[#dfb64c] font-bold mb-3"><span className="w-5 h-px bg-[#dfb64c]" />Authentic Malabar Cuisine</div>
+            <h1 className="font-brand leading-[.95] mb-4"><span className="block text-4xl sm:text-6xl">Authentic</span><span className="block text-4xl sm:text-6xl text-[#dfb64c]">Malabar Taste</span></h1>
+            <p className="text-xs sm:text-sm leading-6 text-[#d2ddd6] max-w-lg mb-5">{tagline}</p>
+            <div className="flex flex-wrap gap-2.5">
+              <button onClick={onCreateAccount} className="inline-flex items-center gap-2 bg-[#dfb64c] text-[#082013] font-bold px-5 py-2.5 rounded-lg text-xs hover:bg-[#ebc95d] transition-all shadow-lg">Order Now <ArrowRight className="w-4 h-4" /></button>
+              <button onClick={onLogin} className="inline-flex items-center gap-2 border border-[#8aa696] text-[#f0f5f1] px-5 py-2.5 rounded-lg text-xs hover:border-[#dfb64c] transition-all">Login to Order</button>
             </div>
+            <div className="flex items-center gap-2 mt-4 text-[10px] text-[#9db1a4]"><MapPin className="w-3.5 h-3.5 text-[#dfb64c]" />Delivered hot to selected nearby areas</div>
           </div>
         </section>
 
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 py-7">
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 py-4 sm:py-5">
           {[
             [Truck, 'First 2 km', 'FREE DELIVERY'],
             [ShieldCheck, 'Cash on Delivery', 'ONLY'],
-            [Clock, 'Freshly Cooked', 'in 10 Minutes'],
+            [Clock, 'Freshly Cooked', 'HOT & FRESH'],
             [UtensilsCrossed, 'Authentic', 'MALABAR TASTE'],
           ].map(([Icon, title, sub], index) => (
-            <div key={index} className="bg-white text-[#123d27] rounded-2xl p-4 sm:p-5 flex items-center gap-3 shadow-sm border border-[#e3e8e2]">
-              <div className="w-11 h-11 rounded-full bg-[#edf5ef] text-[#0b4a2a] flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></div>
-              <div><div className="font-bold text-sm sm:text-base">{title}</div><div className="text-xs sm:text-sm font-semibold text-[#5c6b62]">{sub}</div></div>
+            <div key={index} className="bg-[#0f2d1c] border border-[#255539] rounded-xl p-3 flex items-center gap-2.5 shadow-lg">
+              <div className="w-9 h-9 rounded-full bg-[#173a27] text-[#dfb64c] flex items-center justify-center shrink-0"><Icon className="w-4 h-4" /></div>
+              <div className="min-w-0"><div className="font-bold text-[11px] sm:text-xs truncate">{title}</div><div className="text-[9px] sm:text-[10px] text-[#91aa9a] truncate">{sub}</div></div>
             </div>
           ))}
         </section>
 
-        <section className="rounded-[2rem] bg-[#fbf8f0] text-[#0a2918] px-5 sm:px-10 py-12 mb-10 border border-[#e4dac5] overflow-hidden relative">
-          <div className="relative z-10 text-center">
-            <p className="text-[#c39a2d] uppercase tracking-[0.3em] text-xs font-semibold">Explore Our</p>
-            <h2 className="font-brand text-4xl sm:text-5xl mt-2">Our Menu</h2>
-            <p className="text-[#5c665f] max-w-2xl mx-auto mt-3">A wide range of authentic Kerala and Malabar dishes prepared with traditional recipes and the finest ingredients.</p>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mt-8">
-            {[
-              ['Biryani', 'Authentic Flavours'],
-              ['Porotta', 'Soft & Flaky'],
-              ['Alfaham', 'Grilled Perfection'],
-              ['Seafood', 'Fresh & Delicious'],
-              ['Breakfast', 'Start Your Day Right'],
-              ['Meals', 'Traditional Taste'],
-            ].map(([name, sub]) => (
-              <a key={name} href="/menu.html" className="group bg-white rounded-2xl p-4 border border-[#e3dccd] hover:-translate-y-1 hover:border-[#c9a338] transition-all shadow-sm">
-                <div className="h-20 rounded-xl bg-[#edf5ef] mb-3 flex items-center justify-center text-[#0a4b2a]"><UtensilsCrossed className="w-8 h-8" /></div>
-                <div className="font-bold">{name}</div>
-                <div className="text-xs text-[#6c716d] mt-1">{sub}</div>
-                <div className="mt-3 w-8 h-8 rounded-full bg-[#0b4a2a] text-white flex items-center justify-center group-hover:bg-[#d8b13e] group-hover:text-[#092013] transition-colors"><ChevronRight className="w-4 h-4" /></div>
+        <section className="rounded-[1.25rem] border border-[#d8bc6a]/25 bg-[#fbf8f0] text-[#102419] px-3 sm:px-6 py-6 sm:py-7 overflow-hidden">
+          <div className="text-center mb-5"><p className="text-[#b18421] uppercase tracking-[0.28em] text-[9px] font-bold">Explore Our</p><h2 className="font-brand text-2xl sm:text-3xl mt-1">Menu Categories</h2><p className="text-[10px] sm:text-xs text-[#68786e] mt-1.5">Traditional flavours, prepared fresh for every order.</p></div>
+          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+            {categories.map(([name, sub]) => (
+              <a key={name} href="/menu.html" className="group bg-white rounded-xl p-2.5 sm:p-3 border border-[#e0d8c9] hover:-translate-y-0.5 hover:border-[#c9a338] transition-all shadow-sm text-center">
+                <div className="h-14 sm:h-16 rounded-lg bg-[#edf5ef] mb-2 flex items-center justify-center text-[#0a4b2a]"><UtensilsCrossed className="w-6 h-6" /></div>
+                <div className="font-bold text-[10px] sm:text-xs">{name}</div>
+                <div className="text-[8px] sm:text-[9px] text-[#6c716d] mt-0.5 truncate">{sub}</div>
+                <div className="mx-auto mt-2 w-6 h-6 rounded-full bg-[#0b4a2a] text-white flex items-center justify-center group-hover:bg-[#d8b13e] group-hover:text-[#092013] transition-colors"><ChevronRight className="w-3 h-3" /></div>
               </a>
             ))}
           </div>
         </section>
       </main>
 
-      <footer className="relative z-10 border-t border-[#dfe7e1] py-8 text-center text-sm text-[#68776e] bg-white">
-        <div>{restaurantName} • Authentic Coastal & Malabar Delicacies</div>
-        <div className="mt-2">Serving Bommasandra • Yarandahalli • Jigani • Electronic City</div>
-        <a href={`tel:${phone2}`} className="inline-block mt-2 text-[#b28718] hover:underline">{phone2}</a>
+      <footer className="border-t border-[#234c32] py-5 px-4 text-center text-[10px] text-[#82978a] bg-[#07170e]">
+        <div className="font-brand text-sm text-[#dfb64c]">{restaurantName}</div>
+        <div className="mt-1">GOOD FOOD • BETTER MOODS</div>
+        <div className="mt-1.5">Serving Bommasandra • Yarandahalli • Jigani • Electronic City</div>
+        <a href={`tel:${phone2}`} className="inline-block mt-1.5 text-[#d7b24c] hover:underline">{phone2}</a>
       </footer>
     </div>
   );
