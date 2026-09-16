@@ -3,9 +3,11 @@
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', sans-serif;
+    font-weight: 500;
   }
   .font-brand {
     font-family: 'Cinzel', serif;
+    font-weight: 700;
   }
   .font-mono-receipt {
     font-family: 'JetBrains Mono', monospace;
@@ -18,6 +20,31 @@
 html, body, #root {
   background: #fffefa;
   color: #183225;
+}
+
+/* Stronger readable typography without changing layout or functionality. */
+#root button,
+#root input,
+#root select,
+#root textarea,
+#root label,
+#root p,
+#root span,
+#root li,
+#root td,
+#root th {
+  font-weight: 500;
+}
+
+#root button,
+#root .font-semibold {
+  font-weight: 700;
+}
+
+#root .font-bold,
+#root .font-extrabold,
+#root .font-black {
+  font-weight: 800;
 }
 
 #root [class*="bg-[#0"],
@@ -127,11 +154,13 @@ html, body, #root {
     padding: 2mm !important;
     background: #ffffff !important;
     color: #000000 !important;
+    font-weight: 700 !important;
   }
 
   #thermal-print-container * {
     visibility: visible !important;
     color: #000000 !important;
+    font-weight: 700 !important;
   }
 
   .no-print {
