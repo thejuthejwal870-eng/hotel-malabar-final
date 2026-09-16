@@ -1,18 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://malabarhotel.in/</loc>
-  </url>
-  <url>
-    <loc>https://malabarhotel.in/menu</loc>
-  </url>
-  <url>
-    <loc>https://malabarhotel.in/contact</loc>
-  </url>
-  <url>
-    <loc>https://malabarhotel.in/about</loc>
-  </url>
-  <url>
-    <loc>https://malabarhotel.in/gallery</loc>
-  </url>
+  <url><loc>https://malabarhotel.in/</loc></url>
+  <url><loc>https://malabarhotel.in/menu.html</loc></url>
+  <url><loc>https://malabarhotel.in/contact.html</loc></url>
+  <url><loc>https://malabarhotel.in/about.html</loc></url>
+  <url><loc>https://malabarhotel.in/gallery.html</loc></url>
 </urlset>
