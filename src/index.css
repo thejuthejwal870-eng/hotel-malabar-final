@@ -9,6 +9,8 @@
   --hm-gold: #dfb64c;
   --hm-gold-deep: #cba135;
   --hm-border: rgba(223, 182, 76, 0.22);
+  --hm-ivory: #f7f3e9;
+  --hm-ink: #102419;
 }
 
 @layer base {
@@ -172,6 +174,268 @@ body,
   }
 }
 
+/* ================================================================
+   HOTEL MALABAR PREMIUM MASTER UI
+   One visual language for customer pages, order surfaces and admin.
+   ================================================================ */
+
+/* Customer authenticated experience: ivory content + forest header/cards + gold accents. */
+#root:has(#view-cart-btn) {
+  background: var(--hm-ivory) !important;
+  color: var(--hm-ink) !important;
+}
+
+#root:has(#view-cart-btn) > div.min-h-screen {
+  background:
+    radial-gradient(circle at 50% -10%, rgba(223, 182, 76, 0.16), transparent 28rem),
+    var(--hm-ivory) !important;
+  color: var(--hm-ink) !important;
+}
+
+#root:has(#view-cart-btn) main {
+  background: transparent !important;
+  color: var(--hm-ink) !important;
+}
+
+#root:has(#view-cart-btn) main h1,
+#root:has(#view-cart-btn) main h2,
+#root:has(#view-cart-btn) main h3,
+#root:has(#view-cart-btn) main h4 {
+  color: var(--hm-ink) !important;
+}
+
+#root:has(#view-cart-btn) main p {
+  color: #65756b !important;
+}
+
+#root:has(#view-cart-btn) main [class~="bg-[#0f2a1b]"] {
+  background: linear-gradient(180deg, #fffdf8 0%, #f4efe4 100%) !important;
+  border-color: rgba(20, 61, 38, 0.14) !important;
+  color: var(--hm-ink) !important;
+  box-shadow: 0 18px 36px rgba(21, 47, 31, 0.12), 0 1px 0 rgba(255,255,255,.85) inset !important;
+}
+
+#root:has(#view-cart-btn) main [class~="bg-[#0f2a1b]"] h3,
+#root:has(#view-cart-btn) main [class~="bg-[#0f2a1b]"] h4 {
+  color: #102419 !important;
+}
+
+#root:has(#view-cart-btn) main [class~="bg-[#0f2a1b]"] [class~="text-[#a3bfae]"] {
+  color: #68786e !important;
+}
+
+#root:has(#view-cart-btn) main [class~="bg-[#0f2a1b]"] [class~="border-t"] {
+  border-color: rgba(16, 36, 25, 0.10) !important;
+}
+
+#root:has(#view-cart-btn) main [class~="bg-[#081a10]"] {
+  background: #eee8da !important;
+}
+
+#root:has(#view-cart-btn) main [class~="bg-[#123620]"] {
+  background: #173a27 !important;
+}
+
+#root:has(#view-cart-btn) main [class~="text-[#fcfaf6]"] {
+  color: #102419 !important;
+}
+
+#root:has(#view-cart-btn) main [class~="text-[#8ea896]"] {
+  color: #68786e !important;
+}
+
+#root:has(#view-cart-btn) main [class~="text-[#a6bfae]"] {
+  color: #52665a !important;
+}
+
+#root:has(#view-cart-btn) main [class~="text-[#dfb64c]"] {
+  color: #b18421 !important;
+}
+
+#root:has(#view-cart-btn) main [class~="border-[#183e25]"],
+#root:has(#view-cart-btn) main [class~="border-[#1b432a]"],
+#root:has(#view-cart-btn) main [class~="border-[#1f4a2e]"] {
+  border-color: rgba(18, 59, 37, 0.14) !important;
+}
+
+/* Category rail: premium ivory strip with circular/pill gold selection. */
+#root:has(#view-cart-btn) [class~="bg-[#0d2819]"] {
+  background: #fffdf8 !important;
+  border-color: rgba(18, 59, 37, 0.12) !important;
+  box-shadow: 0 8px 24px rgba(16, 36, 25, 0.08) !important;
+}
+
+#root:has(#view-cart-btn) [class~="bg-[#123620]"] {
+  background: #f0eadf !important;
+  color: #274635 !important;
+  border-color: rgba(20, 61, 38, 0.14) !important;
+}
+
+#root:has(#view-cart-btn) [class~="bg-[#123620]"]:hover {
+  background: #e7dfd0 !important;
+}
+
+#root:has(#view-cart-btn) [class~="bg-[#0a1f13]"] {
+  background: #173a27 !important;
+}
+
+/* Customer food cards: exact premium contrast from the reference mockup. */
+#root:has(#view-cart-btn) [id^="food-card-"] {
+  background: linear-gradient(180deg, #fffefa 0%, #f3eee3 100%) !important;
+  border-color: rgba(18, 59, 37, 0.13) !important;
+  border-radius: 20px !important;
+  overflow: hidden;
+  box-shadow: 0 16px 34px rgba(21, 47, 31, 0.12), 0 1px 0 rgba(255,255,255,.9) inset !important;
+}
+
+#root:has(#view-cart-btn) [id^="food-card-"] [class~="bg-[#081a10]"] {
+  background: #e7dfd1 !important;
+}
+
+#root:has(#view-cart-btn) [id^="food-card-"] [class~="text-[#fcfaf6]"] {
+  color: #102419 !important;
+}
+
+#root:has(#view-cart-btn) [id^="food-card-"] [class~="text-[#a3bfae]"],
+#root:has(#view-cart-btn) [id^="food-card-"] [class~="text-[#7d9e89"]],
+#root:has(#view-cart-btn) [id^="food-card-"] [class~="text-[#8ea896"]] {
+  color: #68786e !important;
+}
+
+#root:has(#view-cart-btn) [id^="food-card-"] [class~="text-[#dfb64c]"] {
+  color: #a87918 !important;
+}
+
+#root:has(#view-cart-btn) [id^="food-card-"] [class~="bg-[#123620]"] {
+  background: #173a27 !important;
+}
+
+/* Premium active order ribbon. */
+#root:has(#view-cart-btn) main > div > [class*="border-[#dfb64c]"] {
+  box-shadow: 0 18px 36px rgba(28, 56, 39, 0.16), 0 0 0 1px rgba(223,182,76,.08) inset !important;
+}
+
+/* Customer footer becomes a strong forest brand bar. */
+#root:has(#view-cart-btn) footer {
+  background: #07170e !important;
+  color: #a7b8ad !important;
+  border-color: rgba(223,182,76,.20) !important;
+}
+
+/* Admin: sharper premium terminal with the same brand language. */
+.admin-page-shell {
+  background:
+    radial-gradient(circle at 12% -5%, rgba(223,182,76,.11), transparent 26rem),
+    radial-gradient(circle at 90% 8%, rgba(38,104,67,.20), transparent 32rem),
+    #06160c !important;
+}
+
+.admin-page-shell header {
+  background: rgba(8, 30, 19, .96) !important;
+  border-bottom-color: rgba(223,182,76,.18) !important;
+  box-shadow: 0 14px 32px rgba(0,0,0,.22) !important;
+  backdrop-filter: blur(18px);
+}
+
+.admin-page-shell aside {
+  background: linear-gradient(180deg, #0a2617 0%, #071b10 100%) !important;
+  border-right-color: rgba(223,182,76,.15) !important;
+}
+
+.admin-page-shell main {
+  background: transparent !important;
+}
+
+.admin-page-shell [class~="bg-[#0f2d1c]"] {
+  background: linear-gradient(180deg, #10331f 0%, #0c2818 100%) !important;
+  border-color: rgba(223,182,76,.13) !important;
+  box-shadow: 0 16px 36px rgba(0,0,0,.18), 0 1px 0 rgba(255,255,255,.025) inset !important;
+}
+
+.admin-page-shell [class~="bg-[#0c2617]"],
+.admin-page-shell [class~="bg-[#0c2417"]] {
+  background: #081f12 !important;
+}
+
+.admin-page-shell [class~="bg-[#113520]"],
+.admin-page-shell [class~="bg-[#113320]"],
+.admin-page-shell [class~="bg-[#123620]"],
+.admin-page-shell [class~="bg-[#143d26"]] {
+  background: #123a24 !important;
+}
+
+.admin-page-shell [class~="bg-[#081a10]"],
+.admin-page-shell [class~="bg-[#091a10]"],
+.admin-page-shell [class~="bg-[#0a1f13"]] {
+  background: #061a0f !important;
+}
+
+.admin-page-shell [class~="border-[#235836]"],
+.admin-page-shell [class~="border-[#245937]"],
+.admin-page-shell [class~="border-[#1b432a"]],
+.admin-page-shell [class~="border-[#1e4e30"]] {
+  border-color: rgba(223,182,76,.15) !important;
+}
+
+.admin-page-shell button:not([class*="bg-red-"]):not([class*="bg-emerald-"]):not([class*="bg-blue-"]):not([class*="bg-purple-"]) {
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
+}
+
+.admin-page-shell button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.admin-page-shell [class*="rounded-2xl"],
+.admin-page-shell [class*="rounded-3xl"] {
+  border-radius: 18px !important;
+}
+
+/* Order cards are the core admin surface: clear hierarchy and gold status accents. */
+.admin-page-shell [class*="border-2 rounded-2xl"] {
+  box-shadow: 0 18px 40px rgba(0,0,0,.20), 0 1px 0 rgba(255,255,255,.025) inset !important;
+}
+
+/* Inputs / search bars: consistent premium terminal controls. */
+.admin-page-shell input,
+.admin-page-shell select,
+.admin-page-shell textarea {
+  background-color: #071d11 !important;
+  border-color: rgba(223,182,76,.16) !important;
+  color: #fcfaf6 !important;
+  border-radius: 12px !important;
+}
+
+.admin-page-shell input:focus,
+.admin-page-shell select:focus,
+.admin-page-shell textarea:focus {
+  border-color: #dfb64c !important;
+  box-shadow: 0 0 0 3px rgba(223,182,76,.10) !important;
+}
+
+/* Login portal gets the same luxury visual language. */
+.admin-page-shell form,
+.admin-page-shell [class*="shadow-2xl"] {
+  --tw-ring-color: rgba(223,182,76,.15);
+}
+
+/* Mobile admin: no squeezed desktop dashboard, clean drawer-friendly spacing. */
+@media (max-width: 1023px) {
+  .admin-page-shell main {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .admin-page-shell header > div:first-child {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .admin-page-shell aside {
+    width: min(86vw, 320px) !important;
+    box-shadow: 22px 0 60px rgba(0,0,0,.45) !important;
+  }
+}
+
 /* Mobile polish. */
 @media (max-width: 640px) {
   #root button {
@@ -211,6 +475,15 @@ body,
 
   .admin-page-shell {
     overflow-x: hidden;
+  }
+
+  #root:has(#view-cart-btn) main {
+    padding-top: 20px !important;
+    padding-bottom: 28px !important;
+  }
+
+  #root:has(#view-cart-btn) [id^="food-card-"] {
+    border-radius: 18px !important;
   }
 }
 
