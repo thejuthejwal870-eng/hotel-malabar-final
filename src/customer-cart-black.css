@@ -1,0 +1,15 @@
+/* Hotel Malabar customer cart: keep delivery text areas in the premium dark style. */
+.fixed.inset-0.z-50.flex.justify-end > div.max-w-lg textarea {
+  background: #07140c !important;
+  color: #fcfaf6 !important;
+  border-color: #315f43 !important;
+  caret-color: #dfb64c;
+}
+
+.fixed.inset-0.z-50.flex.justify-end > div.max-w-lg textarea::placeholder {
+  color: #91a99a !important;
+}
+
+.fixed.inset-0.z-50.flex.justify-end > div.max-w-lg label:has(+ textarea) {
+  color: #dfb64c !important;
+}
