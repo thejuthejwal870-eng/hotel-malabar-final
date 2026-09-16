@@ -1,38 +1,173 @@
-/* Hotel Malabar admin reference layout: one responsive structure at every viewport. */
-.admin-page-shell { width:100%; max-width:100vw; overflow-x:hidden; }
-.admin-page-shell aside { display:none !important; }
-.admin-page-shell header > div:nth-child(2) { display:flex !important; width:100%; overflow-x:auto; scrollbar-width:thin; -webkit-overflow-scrolling:touch; }
-.admin-page-shell header button.lg\:hidden { display:inline-flex !important; }
-.admin-page-shell header > div:first-child { width:100%; max-width:none; padding-left:12px !important; padding-right:12px !important; }
-.admin-page-shell header > div:first-child > div:first-child { min-width:0; }
-.admin-page-shell header > div:first-child > div:last-child { min-width:0; max-width:48%; overflow-x:auto; scrollbar-width:none; }
-.admin-page-shell header > div:first-child > div:last-child::-webkit-scrollbar { display:none; }
-.admin-page-shell > div.flex-1 > main { width:100%; max-width:980px; margin-left:auto; margin-right:auto; padding:14px !important; }
-.admin-page-shell main [class*="grid-cols-2"],.admin-page-shell main [class*="grid-cols-3"],.admin-page-shell main [class*="grid-cols-4"],.admin-page-shell main [class*="grid-cols-5"],.admin-page-shell main [class*="grid-cols-6"] { grid-template-columns:minmax(0,1fr) !important; }
-.admin-page-shell main { font-size:.88rem; }
-.admin-page-shell main h1 { font-size:1.45rem !important; }
-.admin-page-shell main h2 { font-size:1.18rem !important; }
-.admin-page-shell main h3 { font-size:.98rem !important; }
-.admin-page-shell main h4 { font-size:.92rem !important; }
-.admin-page-shell main [class*="p-8"] { padding:1rem !important; }
-.admin-page-shell main [class*="p-6"] { padding:.9rem !important; }
-.admin-page-shell main [class*="p-5"] { padding:.78rem !important; }
-.admin-page-shell main [class*="p-4"] { padding:.68rem !important; }
-.admin-page-shell main [class*="gap-6"] { gap:.85rem !important; }
-.admin-page-shell main [class*="gap-5"] { gap:.72rem !important; }
-.admin-page-shell main [class*="gap-4"] { gap:.62rem !important; }
-.admin-page-shell main [class*="space-y-6"] > :not(:first-child) { margin-top:.85rem !important; }
-.admin-page-shell main [class*="space-y-5"] > :not(:first-child) { margin-top:.72rem !important; }
-.admin-page-shell main [class*="space-y-4"] > :not(:first-child) { margin-top:.62rem !important; }
-.admin-page-shell main [class*="rounded-2xl"],.admin-page-shell main [class*="rounded-3xl"] { border-radius:15px !important; }
-.admin-page-shell main button,.admin-page-shell main input,.admin-page-shell main select,.admin-page-shell main textarea { font-size:.78rem; }
-.admin-page-shell main button { min-height:36px; }
-@media (max-width:640px) {
-  .admin-page-shell header > div:first-child > div:last-child { max-width:42%; }
-  .admin-page-shell > div.flex-1 > main { padding:10px !important; }
-  .admin-page-shell main button { min-height:40px; }
-  .admin-page-shell main input,.admin-page-shell main select,.admin-page-shell main textarea { font-size:16px; }
+/* Hotel Malabar — reference layout: one component tree, responsive presentation. */
+.admin-page-shell {
+  min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  background: #06160c !important;
 }
-@media (min-width:641px) {
-  .admin-page-shell header > div:first-child { padding-top:8px !important; padding-bottom:8px !important; }
+
+.admin-page-shell header {
+  min-height: 56px !important;
+  padding: 0 10px !important;
 }
+
+.admin-page-shell header > div:first-child {
+  min-height: 56px !important;
+  width: 100% !important;
+  max-width: none !important;
+  padding: 7px 10px !important;
+  gap: 8px !important;
+}
+
+.admin-page-shell header > div:first-child > div:first-child { min-width: 0; }
+.admin-page-shell header > div:first-child > div:last-child {
+  min-width: 0;
+  max-width: 55%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.admin-page-shell header > div:first-child > div:last-child::-webkit-scrollbar { display: none; }
+
+/* Desktop keeps the existing management sidebar from the dashboard; mobile uses its existing drawer/nav. */
+.admin-page-shell aside {
+  display: block !important;
+  width: 205px !important;
+  min-width: 205px !important;
+  max-width: 205px !important;
+}
+
+.admin-page-shell > div.flex-1 { min-width: 0; }
+.admin-page-shell > div.flex-1 > main {
+  min-width: 0;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 12px !important;
+}
+
+/* Compact typography and spacing from the reference. */
+.admin-page-shell main { font-size: .82rem; line-height: 1.35; }
+.admin-page-shell main h1 { font-size: 1.45rem !important; line-height: 1.1 !important; }
+.admin-page-shell main h2 { font-size: 1.12rem !important; line-height: 1.15 !important; }
+.admin-page-shell main h3 { font-size: .94rem !important; line-height: 1.2 !important; }
+.admin-page-shell main h4 { font-size: .86rem !important; }
+
+.admin-page-shell main [class*="p-8"] { padding: .85rem !important; }
+.admin-page-shell main [class*="p-6"] { padding: .75rem !important; }
+.admin-page-shell main [class*="p-5"] { padding: .68rem !important; }
+.admin-page-shell main [class*="p-4"] { padding: .6rem !important; }
+.admin-page-shell main [class*="p-3"] { padding: .52rem !important; }
+.admin-page-shell main [class*="gap-6"] { gap: .7rem !important; }
+.admin-page-shell main [class*="gap-5"] { gap: .62rem !important; }
+.admin-page-shell main [class*="gap-4"] { gap: .55rem !important; }
+.admin-page-shell main [class*="gap-3"] { gap: .45rem !important; }
+.admin-page-shell main [class*="space-y-6"] > :not(:first-child) { margin-top: .7rem !important; }
+.admin-page-shell main [class*="space-y-5"] > :not(:first-child) { margin-top: .62rem !important; }
+.admin-page-shell main [class*="space-y-4"] > :not(:first-child) { margin-top: .55rem !important; }
+.admin-page-shell main button,.admin-page-shell main input,.admin-page-shell main select,.admin-page-shell main textarea { font-size: .74rem; }
+.admin-page-shell main button { min-height: 34px; }
+.admin-page-shell main [class*="rounded-2xl"],.admin-page-shell main [class*="rounded-3xl"] { border-radius: 14px !important; }
+.admin-page-shell table { width: 100%; font-size: .72rem; }
+.admin-page-shell th,.admin-page-shell td { padding: .48rem .42rem !important; }
+.admin-page-shell [class*="overflow-x-auto"] { max-width: 100%; scrollbar-width: thin; }
+
+/* Preserve the reference's compact dashboard cards instead of collapsing every grid. */
+.admin-page-shell main [class*="grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+.admin-page-shell main [class*="grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+.admin-page-shell main [class*="grid-cols-4"] { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+.admin-page-shell main [class*="grid-cols-5"] { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+.admin-page-shell main [class*="grid-cols-6"] { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+
+@media (max-width: 767px) {
+  .admin-page-shell aside { display: none !important; }
+  .admin-page-shell > div.flex-1 > main { padding: 9px !important; }
+  .admin-page-shell main { font-size: .78rem; }
+  .admin-page-shell main h1 { font-size: 1.28rem !important; }
+  .admin-page-shell main h2 { font-size: 1.02rem !important; }
+  .admin-page-shell main h3 { font-size: .9rem !important; }
+  .admin-page-shell main [class*="grid-cols-3"],
+  .admin-page-shell main [class*="grid-cols-4"],
+  .admin-page-shell main [class*="grid-cols-5"],
+  .admin-page-shell main [class*="grid-cols-6"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .admin-page-shell main button { min-height: 38px; }
+  .admin-page-shell main input,.admin-page-shell main select,.admin-page-shell main textarea { font-size: 16px; }
+}
+
+@media (min-width: 768px) {
+  .admin-page-shell > div.flex-1 { display: flex; align-items: flex-start; }
+  .admin-page-shell > div.flex-1 > main { flex: 1; }
+}
+
+/* Customer category rail: circular food thumbnails like the supplied reference. */
+.customer-reference-app .hm-category-strip {
+  color: #102419;
+  box-shadow: 0 5px 16px rgba(18,42,28,.08);
+}
+.customer-reference-app .hm-category-chip {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.customer-reference-app .hm-category-avatar {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #edf3ea;
+  border: 2px solid #e2d8c5;
+  color: #17472b;
+  font-size: 9px;
+  font-weight: 800;
+  box-shadow: 0 3px 9px rgba(19,47,30,.10);
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.customer-reference-app .hm-category-avatar img { width:100%; height:100%; object-fit:cover; }
+.customer-reference-app .hm-category-chip:hover .hm-category-avatar { transform: translateY(-1px); border-color: #c9a338; }
+.customer-reference-app .hm-category-chip.is-active .hm-category-avatar {
+  border-color: #c9a338;
+  box-shadow: 0 0 0 3px rgba(201,163,56,.16), 0 5px 12px rgba(19,47,30,.14);
+}
+.customer-reference-app .hm-category-name {
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #263c2e;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.customer-reference-app .hm-category-chip.is-active .hm-category-name { color: #9b7417; }
+.customer-reference-app .hm-category-chip.is-closed { opacity: .48; cursor: not-allowed; }
+.customer-reference-app .hm-category-closed {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  border-radius: 999px;
+  background: #5f1b13;
+  color: #fff;
+  padding: 2px 4px;
+  font-size: 6px;
+  font-weight: 900;
+}
+
+/* Authenticated customer reference proportions. */
+.customer-reference-app .customer-reference-hero { min-height: 0; }
+@media (min-width: 768px) {
+  .customer-reference-app .customer-reference-hero > div.relative { min-height: 300px !important; padding-top: 36px !important; padding-bottom: 36px !important; }
+  .customer-reference-app main { max-width: 1160px !important; }
+}
+@media (max-width: 640px) {
+  .customer-reference-app .customer-reference-hero > div.relative { min-height: 255px !important; padding: 30px 16px !important; }
+  .customer-reference-app .customer-reference-hero h1 { font-size: 2.05rem !important; }
+  .customer-reference-app .customer-reference-hero p { font-size: .69rem !important; line-height: 1.35 !important; }
+  .customer-reference-app main { padding-left: 10px !important; padding-right: 10px !important; }
+  .customer-reference-app [id^="food-card-"] { border-radius: 15px !important; }
+}
+''
