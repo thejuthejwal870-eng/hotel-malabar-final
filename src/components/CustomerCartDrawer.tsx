@@ -77,7 +77,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
     if (!navigator.geolocation) {
       setLocationMessage({
         type: 'error',
-        text: 'Geolocation is not supported by your browser. Please enter your delivery address manually.',
+        text: 'Geolocation is not supported by your browser. Please enable location services to place a delivery order.',
       });
       return;
     }
@@ -102,16 +102,16 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
       (geoError) => {
         setIsLocating(false);
         let errorMsg =
-          'Please enable browser location permission so we can deliver accurately to your pin. You can still enter your address manually.';
+          'Please enable browser location permission so we can verify that your delivery location is within our service area.';
         if (geoError.code === geoError.PERMISSION_DENIED) {
           errorMsg =
-            'Location permission was denied. Please enable location permissions in your browser or device settings to attach your exact delivery pin, or enter your delivery address manually below.';
+            'Location permission was denied. Please enable location permission in your browser/device settings to place a delivery order.';
         } else if (geoError.code === geoError.POSITION_UNAVAILABLE) {
           errorMsg =
-            'Location information is currently unavailable on your device. Please enter your delivery address manually.';
+            'Location information is currently unavailable on your device. Please try again.';
         } else if (geoError.code === geoError.TIMEOUT) {
           errorMsg =
-            'Location request timed out. Please tap "📍 Use My Current Location" again or enter your delivery address manually.';
+            'Location request timed out. Please tap “📍 Use My Current Location” again.';
         }
         setLocationMessage({
           type: 'error',
@@ -174,6 +174,14 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
       setError(
         `Minimum food order is ₹${deliverySettings.minOrderAmount}. Please add ₹${amountNeededForMin} more.`
       );
+      return;
+    }
+    if (!gpsCoords) {
+      setError('Delivery GPS location is required. Please tap “📍 Use My Current Location” so we can verify that we deliver to your location.');
+      setLocationMessage({
+        type: 'error',
+        text: 'GPS location is required before checkout. Tap “📍 Use My Current Location”.',
+      });
       return;
     }
     if (!address.trim()) {
@@ -388,7 +396,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                 </select>
               </div>
 
-              {/* GPS CURRENT LOCATION FEATURE (Requirement: At checkout, add '📍 Use My Current Location') */}
+              {/* GPS CURRENT LOCATION FEATURE (Requirement: At checkout, GPS is mandatory) */}
               <div className="bg-[#0c2417] border border-[#204e31] rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-[#fcfaf6]">
@@ -481,7 +489,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                 )}
 
                 <p className="text-[10px] text-[#7da087] leading-tight">
-                  Captures your exact GPS coordinates at order time. Please also confirm your building/flat details below.
+                  GPS verification is required at checkout. Your location is checked against Hotel Malabar’s delivery service zone before the order is accepted.
                 </p>
               </div>
 
@@ -706,7 +714,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                   ) : (
                     <div className="flex justify-between items-center bg-[#123620] p-1.5 rounded text-[11px] text-[#8ea896]">
                       <span>GPS Pin:</span>
-                      <span>Not attached (Manual address)</span>
+                      <span>Not attached</span>
                     </div>
                   )}
                 </div>
