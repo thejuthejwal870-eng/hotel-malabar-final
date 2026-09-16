@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { RuntimeErrorBoundary } from './components/RuntimeErrorBoundary';
 import './index.css';
+import './admin-reference.css';
 
 const rootElement = document.getElementById('root');
 
