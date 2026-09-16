@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hotel Malabar Menu | Authentic Malabar Food</title>
+  <meta name="description" content="Explore the Hotel Malabar menu with authentic Malabar and Kerala dishes, biryani, porotta, seafood and more." />
+  <link rel="canonical" href="https://malabarhotel.in/menu.html" />
+  <style>body{margin:0;background:#0a1f13;color:#fcfaf6;font-family:Arial,sans-serif}main{max-width:1100px;margin:auto;padding:32px 18px}a{color:#dfb64c}h1{font-size:38px}h2{color:#dfb64c;margin-top:30px}.top{display:flex;gap:18px;flex-wrap:wrap;border-bottom:1px solid #244c34;padding-bottom:18px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.card{background:#11311e;border:1px solid #2b5d3e;border-radius:14px;padding:16px}.price{color:#dfb64c;font-weight:700}.muted{color:#b9c8be}</style>
+</head>
+<body><main>
+  <nav class="top"><a href="/">Hotel Malabar</a><a href="/menu.html">Menu</a><a href="/contact.html">Contact Us</a><a href="/about.html">About Us</a><a href="/gallery.html">Gallery</a></nav>
+  <h1>Hotel Malabar Menu</h1>
+  <p class="muted">Authentic Malabar and Kerala delicacies. Cash on Delivery available for online orders.</p>
+  <div id="menu"><p>Loading menu…</p></div>
+</main>
+<script>
+(async()=>{const root=document.getElementById('menu');try{const r=await fetch('/api/menu');const d=await r.json();const cats=d.categories||[];const items=d.items||[];root.innerHTML=cats.filter(c=>c.isActive!==false).map(c=>{const list=items.filter(i=>i.categoryId===c.id);return list.length?`<section><h2>${escapeHtml(c.name)}</h2><div class="grid">${list.map(i=>`<article class="card"><strong>${escapeHtml(i.name)}</strong><p class="muted">${escapeHtml(i.description||'')}</p><div class="price">₹${Number(i.price||0).toFixed(0)}</div></article>`).join('')}</div></section>`:''}).join('')||'<p>No menu items are currently available.</p>'}catch(e){root.innerHTML='<p>Menu is temporarily unavailable. Please try again shortly.</p>'}})();
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+</script></body></html>
