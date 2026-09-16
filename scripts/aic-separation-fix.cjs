@@ -31,9 +31,10 @@ updateFile('src/App.tsx', (source) => {
   }
 
   // Remove any legacy shortcut code/references anywhere in App.tsx.
-  s = s.replace(/\n\s*const handleKeyDown = \(e: KeyboardEvent\) => \{[\s\S]*?\n\s*\};/g, '');
-  s = s.replace(/\n\s*window\.addEventListener\('keydown', handleKeyDown\);/g, '');
-  s = s.replace(/\n\s*window\.removeEventListener\('keydown', handleKeyDown\);/g, '');
+  // This also handles the compact one-line form currently present in App.tsx.
+  s = s.replace(/\s*const handleKeyDown\s*=\s*\(e:\s*KeyboardEvent\)\s*=>\s*\{[\s\S]*?\};/g, '');
+  s = s.replace(/\s*window\.addEventListener\('keydown',\s*handleKeyDown\);/g, '');
+  s = s.replace(/\s*window\.removeEventListener\('keydown',\s*handleKeyDown\);/g, '');
   s = s.replace(/\s*onOpenAdmin=\{navigateToAdmin\}/g, '');
 
   if (s.includes('handleKeyDown')) throw new Error('Customer/admin routing guard: stale handleKeyDown reference remains in App.tsx');
