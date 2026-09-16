@@ -14,15 +14,11 @@
   }
 }
 
-/* Hotel Malabar light customer/admin theme override.
-   Keeps the existing functionality and gold/green branding while replacing
-   the legacy dark-green application surfaces with the white/cream theme. */
 html, body, #root {
   background: #fffefa;
   color: #183225;
 }
 
-/* Stronger readable typography without changing layout or functionality. */
 #root button,
 #root input,
 #root select,
@@ -123,6 +119,46 @@ html, body, #root {
 #root .border-zinc-700,
 #root .border-zinc-600 {
   border-color: #dfe7e1 !important;
+}
+
+/* Mobile polish: keep cards compact, controls touch-friendly, and drawers within the viewport. */
+@media (max-width: 640px) {
+  #root button {
+    min-height: 40px;
+  }
+
+  #root input,
+  #root select,
+  #root textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  #root .fixed.inset-0 > div {
+    max-width: 100vw;
+  }
+
+  #root img {
+    max-width: 100%;
+  }
+
+  /* Prevent long food/order names from pushing action controls off-screen. */
+  #root h1,
+  #root h2,
+  #root h3,
+  #root h4,
+  #root p,
+  #root span {
+    overflow-wrap: anywhere;
+  }
+
+  /* Reduce accidental horizontal scrolling from wide utility rows. */
+  #root main,
+  #root section,
+  #root header,
+  #root footer {
+    max-width: 100%;
+  }
 }
 
 /* Custom thermal receipt printing rules */
