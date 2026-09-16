@@ -8,6 +8,15 @@ interface CategoryFilterProps {
   categoryCounts: Record<string, number>;
 }
 
+const categoryImageByName: Record<string, string> = {
+  biryani: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=180&q=80',
+  tandoori: 'https://images.unsplash.com/photo-1599487488170-d11ec9c172f0?auto=format&fit=crop&w=180&q=80',
+  shawarma: 'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&w=180&q=80',
+  chinese: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=180&q=80',
+  breakfast: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=180&q=80',
+  meals: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=180&q=80',
+};
+
 export const CategoryFilter: React.FC<CategoryFilterProps> = memo(({
   categories,
   selectedCategoryId,
@@ -15,62 +24,37 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = memo(({
   categoryCounts,
 }) => {
   return (
-    <div className="w-full bg-[#0d2819] border-b border-[#1b432a] py-3 sticky top-[108px] sm:top-[68px] z-30 shadow-md">
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-[#235836] no-scrollbar">
-          {/* All button */}
+    <div className="hm-category-strip w-full bg-[#fbf8f0] border-b border-[#d9cfbb] sticky top-[108px] sm:top-[68px] z-30 shadow-sm">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2.5">
+        <div className="flex items-center gap-3 overflow-x-auto pb-0.5 no-scrollbar">
           <button
             onClick={() => onSelectCategory('all')}
-            className={`whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-              selectedCategoryId === 'all'
-                ? 'bg-[#dfb64c] text-[#0a1f13] shadow'
-                : 'bg-[#123620] text-[#c9dcce] hover:bg-[#184428] border border-[#245937]'
-            }`}
+            className={`hm-category-chip shrink-0 flex flex-col items-center gap-1 min-w-[58px] ${selectedCategoryId === 'all' ? 'is-active' : ''}`}
+            aria-label="All menu"
           >
-            <span>All Menu</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                selectedCategoryId === 'all' ? 'bg-[#0a1f13] text-[#dfb64c]' : 'bg-[#0a1f13]/60 text-[#9bb5a4]'
-              }`}
-            >
-              {Object.values(categoryCounts).reduce((a: number, b: number) => a + b, 0)}
-            </span>
+            <span className="hm-category-avatar">ALL</span>
+            <span className="hm-category-name">All</span>
           </button>
 
-          {/* Categories */}
           {categories.map((cat) => {
             const count = categoryCounts[cat.id] || 0;
             const isSelected = selectedCategoryId === cat.id;
             const isClosed = cat.isActive === false;
+            const image = categoryImageByName[cat.name.trim().toLowerCase()];
 
             return (
               <button
                 key={cat.id}
                 onClick={() => onSelectCategory(cat.id)}
-                className={`whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                  isSelected
-                    ? isClosed
-                      ? 'bg-amber-700 text-amber-100 shadow'
-                      : 'bg-[#dfb64c] text-[#0a1f13] shadow'
-                    : isClosed
-                    ? 'bg-[#181a18] text-amber-400/80 hover:bg-[#222622] border border-amber-800/40'
-                    : 'bg-[#123620] text-[#c9dcce] hover:bg-[#184428] border border-[#245937]'
-                }`}
+                disabled={isClosed}
+                className={`hm-category-chip shrink-0 flex flex-col items-center gap-1 min-w-[64px] ${isSelected ? 'is-active' : ''} ${isClosed ? 'is-closed' : ''}`}
+                aria-label={`${cat.name}${count ? `, ${count} dishes` : ''}`}
               >
-                <span>{cat.name}</span>
-                {isClosed ? (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-950 text-amber-300 font-bold border border-amber-800">
-                    Closed
-                  </span>
-                ) : count > 0 ? (
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                      isSelected ? 'bg-[#0a1f13] text-[#dfb64c]' : 'bg-[#0a1f13]/60 text-[#9bb5a4]'
-                    }`}
-                  >
-                    {count}
-                  </span>
-                ) : null}
+                <span className="hm-category-avatar">
+                  {image ? <img src={image} alt="" className="w-full h-full object-cover" /> : <span>{cat.name.slice(0, 2).toUpperCase()}</span>}
+                  {isClosed && <span className="hm-category-closed">OFF</span>}
+                </span>
+                <span className="hm-category-name">{cat.name}</span>
               </button>
             );
           })}
