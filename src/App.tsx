@@ -8,7 +8,7 @@ import { CustomerCartDrawer } from './components/CustomerCartDrawer';
 import { OrderStatusView } from './components/OrderStatusView';
 import { CustomerOrderHistory } from './components/CustomerOrderHistory';
 import { AdminDashboard } from './components/AdminDashboard';
-import { User, CustomerProfile, MenuItem, MenuCategory, CartItem, DeliverySettings, DeliveryArea, Order } from './types';
+import { User, CustomerProfile, MenuItem, MenuCategory, CartItem, DeliverySettings, DeliveryArea, Order, RestaurantProfile } from './types';
 import { AlertTriangle, Clock, ArrowRight, UtensilsCrossed } from 'lucide-react';
 
 export default function App() {
@@ -35,6 +35,7 @@ export default function App() {
 
   const [customerUser, setCustomerUser] = useState<User | null>(null);
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | undefined>(undefined);
+  const [restaurantProfile, setRestaurantProfile] = useState<RestaurantProfile | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
   const [categories, setCategories] = useState<MenuCategory[]>([]);
@@ -63,7 +64,7 @@ export default function App() {
     try {
       const [menuRes, settingsRes] = await Promise.all([fetch('/api/menu'), fetch('/api/settings')]);
       if (menuRes.ok) { const mData = await menuRes.json(); setCategories(mData.categories || []); setMenuItems(mData.items || []); setMostOrderedItems(mData.mostOrdered || []); }
-      if (settingsRes.ok) { const sData = await settingsRes.json(); if (sData.deliverySettings) setDeliverySettings(sData.deliverySettings); setDeliveryAreas(sData.deliveryAreas || []); }
+      if (settingsRes.ok) { const sData = await settingsRes.json(); if (sData.deliverySettings) setDeliverySettings(sData.deliverySettings); setDeliveryAreas(sData.deliveryAreas || []); if (sData.restaurantProfile) setRestaurantProfile(sData.restaurantProfile); }
     } catch (err) { console.warn('Notice: Server initializing or network reconnecting:', err); }
   }, []);
   useEffect(() => { fetchMenuAndSettings(); const interval = setInterval(() => { if (!document.hidden) fetchMenuAndSettings(); }, 8000); const handleVisibility = () => { if (!document.hidden) fetchMenuAndSettings(); }; document.addEventListener('visibilitychange', handleVisibility); return () => { clearInterval(interval); document.removeEventListener('visibilitychange', handleVisibility); }; }, [fetchMenuAndSettings]);
@@ -91,13 +92,13 @@ export default function App() {
   const filteredMostOrdered = useMemo(() => mostOrderedItems.filter(item => { if (selectedCategoryId !== 'all' && item.categoryId !== selectedCategoryId) return false; if (!searchQuery.trim()) return true; const q = searchQuery.toLowerCase(); return item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q); }), [mostOrderedItems, selectedCategoryId, searchQuery]);
 
   if (viewMode === 'admin') return <div className="admin-page-shell"><AdminDashboard onBackToCustomerSite={navigateToCustomer} /></div>;
-  if (!customerUser) return <><CustomerFirstScreen onCreateAccount={() => { setAuthInitialMode('register'); setAuthModalOpen(true); }} onLogin={() => { setAuthInitialMode('login'); setAuthModalOpen(true); }} onOpenAdmin={navigateToAdmin} /><CustomerAuthModal isOpen={authModalOpen} initialMode={authInitialMode} onClose={() => setAuthModalOpen(false)} onAuthSuccess={handleAuthSuccess} /></>;
+  if (!customerUser) return <><CustomerFirstScreen restaurantProfile={restaurantProfile} onCreateAccount={() => { setAuthInitialMode('register'); setAuthModalOpen(true); }} onLogin={() => { setAuthInitialMode('login'); setAuthModalOpen(true); }} onOpenAdmin={navigateToAdmin} /><CustomerAuthModal isOpen={authModalOpen} initialMode={authInitialMode} onClose={() => setAuthModalOpen(false)} onAuthSuccess={handleAuthSuccess} /></>;
 
-  const heroImage = menuItems[0]?.imageUrl || 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1400&q=90';
+  const heroImage = restaurantProfile?.coverPhotoUrl || menuItems[0]?.imageUrl || 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1400&q=90';
 
   return (
     <div className="customer-reference-app min-h-screen bg-[#07170e] text-[#fcfaf6] flex flex-col font-sans selection:bg-[#cba135] selection:text-[#0a1f13]">
-      <CustomerHeader user={customerUser} cartCount={cartTotalItemsCount} cartTotal={cartFoodTotal} activeOrdersCount={activeOrdersCount} searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenCart={() => setIsCartOpen(true)} onOpenOrders={() => setIsOrderHistoryOpen(true)} onLogout={handleLogout} />
+      <CustomerHeader restaurantProfile={restaurantProfile} user={customerUser} cartCount={cartTotalItemsCount} cartTotal={cartFoodTotal} activeOrdersCount={activeOrdersCount} searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenCart={() => setIsCartOpen(true)} onOpenOrders={() => setIsOrderHistoryOpen(true)} onLogout={handleLogout} />
 
       <section className="customer-reference-hero relative overflow-hidden border-b border-[#c9a338]/25">
         <div className="absolute inset-0"><img src={heroImage} alt="Hotel Malabar signature dish" className="w-full h-full object-cover" /><div className="absolute inset-0 bg-gradient-to-r from-[#06160c] via-[#06160c]/90 to-[#06160c]/20" /><div className="absolute inset-0 bg-gradient-to-t from-[#07170e] via-transparent to-transparent" /></div>
