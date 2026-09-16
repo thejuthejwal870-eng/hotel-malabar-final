@@ -246,7 +246,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
             </div>
             <div>
               <h2 className="font-brand text-lg font-bold text-[#fcfaf6]">Your Food Cart</h2>
-              <span className="text-[11px] text-[#8ea896]">Hotel Malabar Fresh Delivery</span>
+              <span className="text-[11px] !text-black">Hotel Malabar Fresh Delivery</span>
             </div>
           </div>
 
@@ -277,7 +277,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs text-[#8ea896] pb-1 border-b border-[#183e25]">
+              <div className="flex items-center justify-between text-xs !text-black pb-1 border-b border-[#183e25]">
                 <span>Ordered Items ({cartItems.length})</span>
                 <button
                   onClick={onClearCart}
@@ -377,7 +377,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
           {cartItems.length > 0 && (
             <div className="space-y-4 pt-2">
               <div>
-                <label className="block text-xs font-semibold text-[#dfb64c] mb-1 flex items-center gap-1.5">
+                <label className="block text-xs font-semibold !text-black mb-1 flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5" />
                   <span>Select Delivery Area</span>
                 </label>
@@ -494,7 +494,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#c9dcce] mb-1 flex items-center gap-1.5">
+                <label className="block text-xs font-semibold !text-black mb-1 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-[#799983]" />
                   <span>Delivery Address</span>
                 </label>
@@ -511,7 +511,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
               <div>
                 <label
                   htmlFor="special-instructions-input"
-                  className="block text-xs font-semibold text-[#c9dcce] mb-1 flex items-center justify-between"
+                  className="block text-xs font-semibold !text-black mb-1 flex items-center justify-between"
                 >
                   <span>Special Instructions (Optional)</span>
                 </label>
