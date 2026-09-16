@@ -12,6 +12,92 @@
   }
 }
 
+/* Hotel Malabar light customer/admin theme override.
+   Keeps the existing functionality and gold/green branding while replacing
+   the legacy dark-green application surfaces with the white/cream theme. */
+html, body, #root {
+  background: #fffefa;
+  color: #183225;
+}
+
+#root [class*="bg-[#0"],
+#root [class*="bg-[#1"],
+#root [class*="bg-[#2"],
+#root [class*="bg-[#3"],
+#root [class*="bg-[#4"] {
+  background-color: #ffffff !important;
+}
+
+#root [class*="bg-[#0a1f13"],
+#root [class*="bg-[#061b10"],
+#root [class*="bg-[#04150c"],
+#root [class*="bg-[#0b2b1a"],
+#root [class*="bg-[#0d2819"],
+#root [class*="bg-[#0f2a1b"],
+#root [class*="bg-[#081a10"],
+#root [class*="bg-[#123620"],
+#root [class*="bg-[#143d26"],
+#root [class*="bg-[#184428"],
+#root [class*="bg-[#153d27"] {
+  background-color: #ffffff !important;
+}
+
+#root [class*="text-[#fcfaf6"],
+#root [class*="text-[#fdfbf7"],
+#root [class*="text-[#e8dfcd"],
+#root [class*="text-[#c9dcce"],
+#root [class*="text-[#a3bfae"],
+#root [class*="text-[#9ab2a2"],
+#root [class*="text-[#8ea896"],
+#root [class*="text-[#7d9e89"],
+#root [class*="text-[#71917d"],
+#root [class*="text-[#708b7b"],
+#root [class*="text-[#75927f"],
+#root [class*="text-[#6d8c77"] {
+  color: #52645a !important;
+}
+
+#root [class*="border-[#1"],
+#root [class*="border-[#2"],
+#root [class*="border-[#3"],
+#root [class*="border-[#4"] {
+  border-color: #dfe7e1 !important;
+}
+
+#root .bg-gray-900,
+#root .bg-gray-800,
+#root .bg-gray-700,
+#root .bg-slate-900,
+#root .bg-slate-800,
+#root .bg-zinc-900,
+#root .bg-zinc-800,
+#root .bg-neutral-900,
+#root .bg-neutral-800 {
+  background-color: #ffffff !important;
+}
+
+#root .text-white {
+  color: #173b29 !important;
+}
+
+#root .text-gray-100,
+#root .text-gray-200,
+#root .text-gray-300,
+#root .text-slate-100,
+#root .text-slate-200,
+#root .text-slate-300 {
+  color: #52645a !important;
+}
+
+#root .border-gray-700,
+#root .border-gray-600,
+#root .border-slate-700,
+#root .border-slate-600,
+#root .border-zinc-700,
+#root .border-zinc-600 {
+  border-color: #dfe7e1 !important;
+}
+
 /* Custom thermal receipt printing rules */
 @media print {
   @page {
@@ -27,12 +113,10 @@
     width: 100% !important;
   }
 
-  /* When printing, hide all main application elements */
   #root {
     display: none !important;
   }
 
-  /* Only show the print container which can be placed directly in body */
   #thermal-print-container {
     display: block !important;
     position: absolute !important;
