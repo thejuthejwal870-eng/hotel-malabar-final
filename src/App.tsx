@@ -39,7 +39,6 @@ export default function App() {
     );
   };
 
-  // Customer site is the default homepage. Admin is available only through the private /admin route.
   const [viewMode, setViewMode] = useState<'customer' | 'admin'>(() =>
     isAdminPath() ? 'admin' : 'customer'
   );
@@ -48,33 +47,27 @@ export default function App() {
     const handleLocationChange = () => {
       setViewMode(isAdminPath() ? 'admin' : 'customer');
     };
-
     const originalPushState = window.history.pushState;
     const originalReplaceState = window.history.replaceState;
-
     window.history.pushState = function (...args) {
       const result = originalPushState.apply(this, args);
       handleLocationChange();
       return result;
     };
-
     window.history.replaceState = function (...args) {
       const result = originalReplaceState.apply(this, args);
       handleLocationChange();
       return result;
     };
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.altKey || e.ctrlKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
         e.preventDefault();
         window.history.pushState({}, '', '/admin');
       }
     };
-
     window.addEventListener('popstate', handleLocationChange);
     window.addEventListener('hashchange', handleLocationChange);
     window.addEventListener('keydown', handleKeyDown);
-
     return () => {
       window.history.pushState = originalPushState;
       window.history.replaceState = originalReplaceState;
@@ -88,7 +81,6 @@ export default function App() {
     if (typeof window !== 'undefined') window.history.pushState({}, '', '/');
     setViewMode('customer');
   };
-
   const navigateToAdmin = () => {
     if (typeof window !== 'undefined') window.history.pushState({}, '', '/admin');
     setViewMode('admin');
@@ -98,7 +90,6 @@ export default function App() {
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | undefined>(undefined);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
-
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [mostOrderedItems, setMostOrderedItems] = useState<MenuItem[]>([]);
@@ -112,7 +103,6 @@ export default function App() {
     defaultPrepTimeMinutes: 10,
   });
   const [deliveryAreas, setDeliveryAreas] = useState<DeliveryArea[]>([]);
-
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [activeTrackingOrderId, setActiveTrackingOrderId] = useState<string | null>(null);
@@ -142,9 +132,7 @@ export default function App() {
           }
         });
     }
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, []);
 
   const fetchMenuAndSettings = useCallback(async () => {
@@ -152,12 +140,9 @@ export default function App() {
       const [menuRes, settingsRes] = await Promise.all([fetch('/api/menu'), fetch('/api/settings')]);
       if (menuRes.ok) {
         const mData = await menuRes.json();
-        const incomingCategories: MenuCategory[] = mData.categories || [];
-        const incomingItems: MenuItem[] = mData.items || [];
-        const incomingMostOrdered: MenuItem[] = mData.mostOrdered || [];
-        setCategories(incomingCategories);
-        setMenuItems(incomingItems);
-        setMostOrderedItems(incomingMostOrdered);
+        setCategories(mData.categories || []);
+        setMenuItems(mData.items || []);
+        setMostOrderedItems(mData.mostOrdered || []);
       }
       if (settingsRes.ok) {
         const sData = await settingsRes.json();
@@ -171,12 +156,8 @@ export default function App() {
 
   useEffect(() => {
     fetchMenuAndSettings();
-    const interval = setInterval(() => {
-      if (!document.hidden) fetchMenuAndSettings();
-    }, 8000);
-    const handleVisibility = () => {
-      if (!document.hidden) fetchMenuAndSettings();
-    };
+    const interval = setInterval(() => { if (!document.hidden) fetchMenuAndSettings(); }, 8000);
+    const handleVisibility = () => { if (!document.hidden) fetchMenuAndSettings(); };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       clearInterval(interval);
@@ -192,12 +173,10 @@ export default function App() {
 
   useEffect(() => {
     if (menuItems.length > 0) {
-      setCartItems((prev) =>
-        prev.map((ci) => {
-          const fresh = menuItems.find((m) => m.id === ci.menuItem.id);
-          return fresh ? { ...ci, menuItem: fresh } : ci;
-        })
-      );
+      setCartItems((prev) => prev.map((ci) => {
+        const fresh = menuItems.find((m) => m.id === ci.menuItem.id);
+        return fresh ? { ...ci, menuItem: fresh } : ci;
+      }));
     }
   }, [menuItems]);
 
@@ -223,9 +202,7 @@ export default function App() {
     };
     fetchCustomerOrders();
     const interval = setInterval(fetchCustomerOrders, 6000);
-    const handleVisibility = () => {
-      if (!document.hidden) fetchCustomerOrders();
-    };
+    const handleVisibility = () => { if (!document.hidden) fetchCustomerOrders(); };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       isMounted = false;
@@ -263,15 +240,10 @@ export default function App() {
     setCartItems((prev) => {
       const item = prev.find((ci) => ci.menuItem.id === itemId);
       if (!item || (delta > 0 && !item.menuItem.isAvailable)) return prev;
-      return prev
-        .map((ci) => ci.menuItem.id === itemId ? { ...ci, quantity: ci.quantity + delta } : ci)
-        .filter((ci) => ci.quantity > 0);
+      return prev.map((ci) => ci.menuItem.id === itemId ? { ...ci, quantity: ci.quantity + delta } : ci).filter((ci) => ci.quantity > 0);
     });
   }, []);
-
-  const handleRemoveCartItem = useCallback((itemId: string) => {
-    setCartItems((prev) => prev.filter((ci) => ci.menuItem.id !== itemId));
-  }, []);
+  const handleRemoveCartItem = useCallback((itemId: string) => setCartItems((prev) => prev.filter((ci) => ci.menuItem.id !== itemId)), []);
   const handleClearCart = useCallback(() => setCartItems([]), []);
   const handleOrderPlaced = useCallback((newOrder: Order) => {
     setActiveTrackingOrderId(newOrder.id);
@@ -299,7 +271,13 @@ export default function App() {
     return item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q);
   }), [mostOrderedItems, selectedCategoryId, searchQuery]);
 
-  if (viewMode === 'admin') return <AdminDashboard onBackToCustomerSite={navigateToCustomer} />;
+  if (viewMode === 'admin') {
+    return (
+      <div className="admin-page-shell">
+        <AdminDashboard onBackToCustomerSite={navigateToCustomer} />
+      </div>
+    );
+  }
 
   if (!customerUser) {
     return (
