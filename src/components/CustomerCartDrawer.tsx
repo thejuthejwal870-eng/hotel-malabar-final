@@ -245,7 +245,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
               <Truck className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="font-brand text-lg font-bold text-[#fcfaf6]">Your Food Cart</h2>
+              <h2 className="font-brand text-lg font-bold !text-black">Your Food Cart</h2>
               <span className="text-[11px] !text-black">Hotel Malabar Fresh Delivery</span>
             </div>
           </div>
