@@ -27,25 +27,34 @@ export const CustomerFirstScreen: React.FC<CustomerFirstScreenProps> = ({
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-[#1d5032]/30 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-24 -right-24 w-[400px] h-[400px] bg-[#cba135]/10 rounded-full blur-2xl pointer-events-none" />
 
-      <header className="relative z-10 w-full max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#1b432a]">
-        <div className="flex items-center gap-2 text-xs sm:text-sm text-[#e0d6be]">
-          <span className={`inline-block w-2 h-2 rounded-full ${isOnlineOpen ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-          <span className="font-medium text-[#dfb64c]">{isOnlineOpen ? 'Orders Open' : 'Orders Currently Closed'}</span>
-          <span className="text-[#8ba794]">•</span>
-          <span>Cash on Delivery Only</span>
+      <header className="relative z-10 w-full max-w-6xl mx-auto px-4 py-4 border-b border-[#1b432a]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-[#e0d6be]">
+            <span className={`inline-block w-2 h-2 rounded-full ${isOnlineOpen ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+            <span className="font-medium text-[#dfb64c]">{isOnlineOpen ? 'Orders Open' : 'Orders Currently Closed'}</span>
+            <span className="text-[#8ba794]">•</span>
+            <span>Cash on Delivery Only</span>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-[#dcd4c3]">
+            <span className="hidden sm:inline text-[#a6bfae]">Hotlines:</span>
+            <a href={`tel:${phone1}`} className="flex items-center gap-1 hover:text-[#dfb64c] transition-colors bg-[#11311e] px-2.5 py-1 rounded-full border border-[#214f34]">
+              <Phone className="w-3 h-3 text-[#dfb64c]" />
+              <span>{phone1}</span>
+            </a>
+            <a href={`tel:${phone2}`} className="hidden md:flex items-center gap-1 hover:text-[#dfb64c] transition-colors bg-[#11311e] px-2.5 py-1 rounded-full border border-[#214f34]">
+              <Phone className="w-3 h-3 text-[#dfb64c]" />
+              <span>{phone2}</span>
+            </a>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-[#dcd4c3]">
-          <span className="hidden sm:inline text-[#a6bfae]">Hotlines:</span>
-          <a href={`tel:${phone1}`} className="flex items-center gap-1 hover:text-[#dfb64c] transition-colors bg-[#11311e] px-2.5 py-1 rounded-full border border-[#214f34]">
-            <Phone className="w-3 h-3 text-[#dfb64c]" />
-            <span>{phone1}</span>
-          </a>
-          <a href={`tel:${phone2}`} className="hidden md:flex items-center gap-1 hover:text-[#dfb64c] transition-colors bg-[#11311e] px-2.5 py-1 rounded-full border border-[#214f34]">
-            <Phone className="w-3 h-3 text-[#dfb64c]" />
-            <span>{phone2}</span>
-          </a>
-        </div>
+        <nav aria-label="Hotel Malabar" className="mt-4 flex flex-wrap justify-center gap-2 sm:gap-3">
+          <a href="/menu.html" className="px-4 py-2 rounded-full bg-[#11311e] border border-[#2b5d3e] text-[#f5ead0] hover:border-[#dfb64c] hover:text-[#dfb64c] transition-colors font-semibold">Menu</a>
+          <a href="/contact.html" className="px-4 py-2 rounded-full bg-[#11311e] border border-[#2b5d3e] text-[#f5ead0] hover:border-[#dfb64c] hover:text-[#dfb64c] transition-colors font-semibold">Contact Us</a>
+          <a href="/about.html" className="px-4 py-2 rounded-full bg-[#11311e] border border-[#2b5d3e] text-[#f5ead0] hover:border-[#dfb64c] hover:text-[#dfb64c] transition-colors font-semibold">About Us</a>
+          <a href="/gallery.html" className="px-4 py-2 rounded-full bg-[#11311e] border border-[#2b5d3e] text-[#f5ead0] hover:border-[#dfb64c] hover:text-[#dfb64c] transition-colors font-semibold">Gallery</a>
+        </nav>
       </header>
 
       <main className="relative z-10 w-full max-w-4xl mx-auto px-4 py-8 sm:py-12 flex flex-col items-center text-center my-auto">
