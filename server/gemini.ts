@@ -1,4 +1,8 @@
 import { GoogleGenAI, Type } from '@google/genai';
+import { installDeliveryGeofence } from './delivery-geofence.ts';
+
+// Install server-side delivery checks before any order route can create an order.
+installDeliveryGeofence();
 
 export interface ExtractedMenuItem {
   name: string;
