@@ -4,6 +4,7 @@ import App from './App.tsx';
 import { RuntimeErrorBoundary } from './components/RuntimeErrorBoundary';
 import './index.css';
 import './admin-reference.css';
+import './customer-cart-black.css';
 
 const rootElement = document.getElementById('root');
 
@@ -16,7 +17,7 @@ window.addEventListener('error', (event) => {
   console.error('Hotel Malabar browser error:', event.error || event.message);
 });
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('Hotel Malabar unhandled promise rejection:', event.reason);
+  console.error('Hotel Malabar browser error:', event.reason);
 });
 
 createRoot(rootElement).render(
