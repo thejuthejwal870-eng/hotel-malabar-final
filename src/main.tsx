@@ -4,6 +4,7 @@ import App from './App.tsx';
 import { RuntimeErrorBoundary } from './components/RuntimeErrorBoundary';
 import './index.css';
 import './admin-reference.css';
+import './admin-layout-fix.css';
 import './customer-cart-black.css';
 
 const rootElement = document.getElementById('root');
