@@ -20,6 +20,7 @@ export interface MenuCategory {
   id: string;
   name: string;
   icon: string;
+  imageUrl?: string;
   displayOrder: number;
   isActive: boolean;
 }
@@ -49,7 +50,7 @@ export interface FoodRating {
   customerId: string;
   customerName: string;
   customerPhone?: string;
-  rating: number; // 1 to 5
+  rating: number;
   review?: string;
   createdAt: string;
 }
@@ -60,22 +61,9 @@ export interface CartItem {
 }
 
 export type OrderStatus =
-  | 'NEW'
-  | 'Order Placed'
-  | 'ACCEPTED'
-  | 'Accepted'
-  | 'PREPARING'
-  | 'Preparing'
-  | 'READY'
-  | 'Ready'
-  | 'OUT FOR DELIVERY'
-  | 'Out for Delivery'
-  | 'DELIVERED'
-  | 'Delivered'
-  | 'REJECTED'
-  | 'Order Rejected'
-  | 'CANCELLED'
-  | 'Cancelled';
+  | 'NEW' | 'Order Placed' | 'ACCEPTED' | 'Accepted' | 'PREPARING' | 'Preparing'
+  | 'READY' | 'Ready' | 'OUT FOR DELIVERY' | 'Out for Delivery' | 'DELIVERED' | 'Delivered'
+  | 'REJECTED' | 'Order Rejected' | 'CANCELLED' | 'Cancelled';
 
 export interface OrderItem {
   id: string;
@@ -121,7 +109,7 @@ export interface Order {
 
 export interface DailyExpense {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   title: string;
   category: string;
   amount: number;
