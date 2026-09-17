@@ -1,0 +1,87 @@
+/* Hotel Malabar Admin — responsive layout guardrails. */
+
+/* Keep the admin header horizontal instead of allowing brand text to collapse letter-by-letter. */
+.admin-page-shell > header > div:first-child {
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  flex-wrap:nowrap !important;
+  overflow:hidden !important;
+}
+.admin-page-shell > header > div:first-child > div:first-child {
+  flex:1 1 48% !important;
+  min-width:0 !important;
+  max-width:48% !important;
+  overflow:hidden !important;
+  display:flex !important;
+  align-items:center !important;
+  white-space:nowrap !important;
+}
+.admin-page-shell > header > div:first-child > div:first-child > div:last-child {
+  min-width:0 !important;
+  overflow:hidden !important;
+}
+.admin-page-shell > header .font-brand {
+  white-space:nowrap !important;
+  word-break:normal !important;
+  overflow-wrap:normal !important;
+  display:inline-block !important;
+}
+.admin-page-shell > header > div:first-child > div:first-child span {
+  word-break:normal !important;
+  overflow-wrap:normal !important;
+}
+.admin-page-shell > header > div:first-child > div:last-child {
+  flex:0 1 52% !important;
+  width:auto !important;
+  max-width:52% !important;
+  min-width:0 !important;
+  overflow-x:auto !important;
+  overflow-y:hidden !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-end !important;
+  white-space:nowrap !important;
+  scrollbar-width:none !important;
+}
+.admin-page-shell > header > div:first-child > div:last-child::-webkit-scrollbar { display:none; }
+.admin-page-shell > header > div:first-child > div:last-child > * { flex-shrink:0 !important; }
+.admin-page-shell > header button { white-space:nowrap !important; word-break:normal !important; overflow-wrap:normal !important; }
+
+/* Keep the dashboard body inside the viewport while retaining one shared component structure. */
+.admin-page-shell > div.flex-1 { min-width:0 !important; width:100% !important; }
+.admin-page-shell > div.flex-1 > main { min-width:0 !important; width:100% !important; overflow-x:hidden !important; }
+.admin-page-shell aside { flex-shrink:0 !important; }
+.admin-page-shell main [class*="overflow-x-auto"] { max-width:100% !important; }
+
+@media (max-width:767px) {
+  .admin-page-shell > header { padding:0 6px !important; }
+  .admin-page-shell > header > div:first-child { padding:6px !important; gap:6px !important; }
+  .admin-page-shell > header > div:first-child > div:first-child {
+    flex-basis:44% !important;
+    max-width:44% !important;
+    gap:6px !important;
+  }
+  .admin-page-shell > header > div:first-child > div:first-child > div:first-child {
+    width:34px !important;
+    height:34px !important;
+    flex-shrink:0 !important;
+  }
+  .admin-page-shell > header > div:first-child > div:first-child .font-brand { font-size:.82rem !important; }
+  .admin-page-shell > header > div:first-child > div:first-child span.bg-\\[\\#dfb64c\\] {
+    font-size:7px !important;
+    padding:2px 5px !important;
+    white-space:nowrap !important;
+  }
+  .admin-page-shell > header > div:first-child > div:last-child {
+    flex-basis:56% !important;
+    max-width:56% !important;
+    justify-content:flex-start !important;
+  }
+  .admin-page-shell > header > div:first-child > div:last-child button {
+    font-size:10px !important;
+    padding:5px 7px !important;
+    min-height:30px !important;
+  }
+  .admin-page-shell > header > div:first-child > div:last-child button svg { width:14px !important; height:14px !important; }
+}
