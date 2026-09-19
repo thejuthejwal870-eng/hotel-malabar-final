@@ -799,11 +799,12 @@ app.post('/api/admin/menu/items/:id/move', requireAdminAuth, (req: Request, res:
 // Category Management
 app.post('/api/admin/menu/categories', requireAdminAuth, (req: Request, res: Response) => {
   try {
-    const { name, icon } = req.body;
+    const { name, icon, imageUrl } = req.body;
     if (!name) return res.status(400).json({ error: 'Category name is required' });
     const cat = db.addCategory({
       name,
       icon: icon || 'Utensils',
+      imageUrl: typeof imageUrl === 'string' && imageUrl.trim() ? imageUrl.trim() : undefined,
       displayOrder: db.getMenuCategories().length + 1,
       isActive: true,
     });
