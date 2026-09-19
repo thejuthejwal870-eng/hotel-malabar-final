@@ -75,21 +75,21 @@ export const CustomerOrderHistory: React.FC<CustomerOrderHistoryProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm">
-      <div className="relative w-full max-w-lg bg-[#0e2a1b] border border-[#235836] rounded-2xl shadow-2xl text-[#fdfbf7] p-4 sm:p-6 max-h-[88vh] flex flex-col justify-between">
-        <div className="flex items-center justify-between pb-4 border-b border-[#1b432a]">
+      <div className="relative w-full max-w-lg bg-[#211c16] border border-[#5b4728] rounded-2xl shadow-2xl text-[#f7f1e6] p-4 sm:p-6 max-h-[88vh] flex flex-col justify-between">
+        <div className="flex items-center justify-between pb-4 border-b border-[#5b4728]">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 shrink-0 rounded-lg bg-[#143d26] border border-[#cba135]/50 flex items-center justify-center text-[#dfb64c]">
+            <div className="w-8 h-8 shrink-0 rounded-lg bg-[#2a2118] border border-[#b98b43]/50 flex items-center justify-center text-[#e0b568]">
               <Clock className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-brand text-xl font-bold text-[#fcfaf6]">My Orders</h3>
-              <span className="text-[11px] text-[#8ea896]">Hotel Malabar Order History</span>
+              <h3 className="font-brand text-xl font-bold text-[#f7f1e6]">My Orders</h3>
+              <span className="text-[11px] text-[#a99d8e]">Hotel Malabar Order History</span>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="min-h-10 min-w-10 p-1.5 rounded-full hover:bg-[#184428] text-[#a6bfae] hover:text-[#fdfbf7] cursor-pointer flex items-center justify-center"
+            className="min-h-10 min-w-10 p-1.5 rounded-full hover:bg-[#4f3d25] text-[#b7ab9c] hover:text-[#f7f1e6] cursor-pointer flex items-center justify-center"
             aria-label="Close order history"
           >
             <X className="w-5 h-5" />
@@ -98,14 +98,14 @@ export const CustomerOrderHistory: React.FC<CustomerOrderHistoryProps> = ({
 
         <div className="py-4 flex-1 overflow-y-auto space-y-3">
           {loading ? (
-            <div className="py-12 text-center text-[#8ea896]">
-              <RefreshCw className="w-6 h-6 text-[#dfb64c] animate-spin mx-auto mb-2" />
+            <div className="py-12 text-center text-[#a99d8e]">
+              <RefreshCw className="w-6 h-6 text-[#e0b568] animate-spin mx-auto mb-2" />
               <p className="text-xs">Loading your order history...</p>
             </div>
           ) : orders.length === 0 ? (
-            <div className="py-12 text-center text-[#8ea896]">
+            <div className="py-12 text-center text-[#a99d8e]">
               <ShoppingBag className="w-10 h-10 text-[#255837] mx-auto mb-2" />
-              <p className="text-sm font-medium text-[#c9dcce]">No orders yet</p>
+              <p className="text-sm font-medium text-[#ddd4c7]">No orders yet</p>
               <p className="text-xs mt-1">Explore the menu to place your first authentic Malabar meal.</p>
             </div>
           ) : (
@@ -123,14 +123,14 @@ export const CustomerOrderHistory: React.FC<CustomerOrderHistoryProps> = ({
                 <button
                   key={order.id}
                   onClick={() => onSelectOrder(order.id)}
-                  className="w-full text-left p-3.5 bg-[#113320] hover:bg-[#163e26] border border-[#214f34] hover:border-[#dfb64c]/60 rounded-xl transition-all cursor-pointer group flex items-center justify-between gap-3 shadow-sm"
+                  className="w-full text-left p-3.5 bg-[#241e17] hover:bg-[#4a3924] border border-[#66502d] hover:border-[#e0b568]/60 rounded-xl transition-all cursor-pointer group flex items-center justify-between gap-3 shadow-sm"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="font-mono font-bold text-xs text-[#dfb64c]">
+                      <span className="font-mono font-bold text-xs text-[#e0b568]">
                         {order.orderNumber}
                       </span>
-                      <span className="text-[10px] bg-[#091a10] border border-[#1b432a] text-[#8ea896] px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] bg-[#17130f] border border-[#5b4728] text-[#a99d8e] px-2 py-0.5 rounded-full">
                         {dateStr}
                       </span>
                       {order.customerLatitude && order.customerLongitude && (
@@ -141,13 +141,13 @@ export const CustomerOrderHistory: React.FC<CustomerOrderHistoryProps> = ({
                       )}
                     </div>
 
-                    <p className="text-xs text-[#c9dcce] truncate font-medium">
+                    <p className="text-xs text-[#ddd4c7] truncate font-medium">
                       {order.items.map((i) => `${i.quantity}x ${i.itemName}`).join(', ')}
                     </p>
 
                     <div className="flex items-center gap-2.5 mt-2 flex-wrap text-[11px]">
-                      <span className="font-mono font-bold text-[#dfb64c]">₹{order.grandTotal}</span>
-                      <span className="text-[#8ea896]">COD</span>
+                      <span className="font-mono font-bold text-[#e0b568]">₹{order.grandTotal}</span>
+                      <span className="text-[#a99d8e]">COD</span>
                       <span
                         className={`font-semibold px-2 py-1 rounded-full text-[10px] ${
                           statusLabel === 'Delivered'
@@ -162,7 +162,7 @@ export const CustomerOrderHistory: React.FC<CustomerOrderHistoryProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-[#6d8a76] group-hover:text-[#dfb64c] transition-colors shrink-0">
+                  <div className="text-[#6d8a76] group-hover:text-[#e0b568] transition-colors shrink-0">
                     <ChevronRight className="w-5 h-5" />
                   </div>
                 </button>
@@ -171,10 +171,10 @@ export const CustomerOrderHistory: React.FC<CustomerOrderHistoryProps> = ({
           )}
         </div>
 
-        <div className="pt-3 border-t border-[#1b432a] flex justify-end">
+        <div className="pt-3 border-t border-[#5b4728] flex justify-end">
           <button
             onClick={onClose}
-            className="min-h-10 bg-[#123620] hover:bg-[#184428] text-[#c9dcce] text-xs font-semibold py-2 px-4 rounded-xl border border-[#245937] cursor-pointer"
+            className="min-h-10 bg-[#2a2118] hover:bg-[#4f3d25] text-[#ddd4c7] text-xs font-semibold py-2 px-4 rounded-xl border border-[#66502d] cursor-pointer"
           >
             Close
           </button>
