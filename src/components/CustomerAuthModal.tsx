@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Phone, User, ArrowRight, AlertCircle, CheckCircle2, UtensilsCrossed } from 'lucide-react';
-import { User as UserType } from '../types';
+import { User as UserType, RestaurantProfile } from '../types';
 
 interface CustomerAuthModalProps {
   isOpen: boolean;
   initialMode?: 'login' | 'register';
   onClose: () => void;
   onAuthSuccess: (token: string, user: UserType) => void;
+  restaurantProfile?: RestaurantProfile | null;
 }
 
 export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   isOpen,
   onClose,
   onAuthSuccess,
+  restaurantProfile,
 }) => {
   const [phone, setPhone] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -22,6 +24,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   const [lookupLoading, setLookupLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const restaurantName = restaurantProfile?.name || 'HOTEL MALABAR';
+  const logoUrl = restaurantProfile?.logoUrl?.trim() || '';
 
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
@@ -143,11 +147,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-md bg-[#0f2a1b] border border-[#235836] rounded-3xl shadow-2xl text-[#fdfbf7] p-6 sm:p-8 my-8">
+      <div className="relative w-full max-w-md bg-[#17130f] border border-[#5b4728] rounded-3xl shadow-2xl text-[#fdfbf7] p-6 sm:p-8 my-8">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-[#a6bfae] hover:text-[#fdfbf7] p-2 rounded-full hover:bg-[#1a442b] transition-colors cursor-pointer"
+          className="absolute top-4 right-4 text-[#a6bfae] hover:text-[#fdfbf7] p-2 rounded-full hover:bg-[#2a2118] transition-colors cursor-pointer"
           aria-label="Close"
         >
           <X className="w-5 h-5" />
@@ -155,14 +159,26 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
 
         {/* Header Branding */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-1.5 bg-[#163e26] border border-[#cba135]/50 px-3 py-1 rounded-full text-xs font-semibold text-[#dfb64c] uppercase tracking-wider mb-3 shadow-sm">
+          <div className="mx-auto mb-4 w-24 h-24 sm:w-28 sm:h-28 rounded-2xl border border-[#d3a955] bg-[#f7f1e6] shadow-xl overflow-hidden flex items-center justify-center">
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={`${restaurantName} logo`}
+                className="w-full h-full object-contain p-2"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            ) : (
+              <UtensilsCrossed className="w-8 h-8 text-[#80602f]" />
+            )}
+          </div>
+          <div className="inline-flex items-center gap-1.5 bg-[#241e17] border border-[#cba135]/50 px-3 py-1 rounded-full text-xs font-semibold text-[#dfb64c] uppercase tracking-wider mb-3 shadow-sm">
             <UtensilsCrossed className="w-3.5 h-3.5" />
-            <span>Hotel Malabar Customer Login</span>
+            <span>{restaurantName} Customer Login</span>
           </div>
           <h2 className="font-brand text-2xl sm:text-3xl font-bold text-[#fcfaf6]">
-            Welcome to Hotel Malabar
+            Welcome to {restaurantName}
           </h2>
-          <p className="text-xs sm:text-sm text-[#9bb5a4] mt-1.5 max-w-xs mx-auto">
+          <p className="text-xs sm:text-sm text-[#a99d8e] mt-1.5 max-w-xs mx-auto">
             Enter your mobile number and name to explore our authentic Kerala menu and place orders.
           </p>
         </div>
@@ -176,8 +192,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         )}
 
         {successMessage && (
-          <div className="mb-4 p-3 rounded-xl bg-emerald-950/90 border border-emerald-800 text-emerald-200 text-xs flex items-start gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="mb-4 p-3 rounded-xl bg-[#1e2a20] border border-[#526044] text-[#d7e3d1] text-xs flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 text-[#a9c48f] shrink-0 mt-0.5" />
             <span>{successMessage}</span>
           </div>
         )}
@@ -186,13 +202,13 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         <form onSubmit={handleContinue} className="space-y-4">
           {/* 1. Phone Number */}
           <div>
-            <label className="block text-xs text-[#c9dcce] mb-1.5 font-semibold">
+            <label className="block text-xs text-[#d8d0c2] mb-1.5 font-semibold">
               Phone Number <span className="text-[#dfb64c]">*</span>
             </label>
             <div className="relative">
               <div className="absolute left-3 top-3 flex items-center gap-1.5 text-[#dfb64c] pointer-events-none">
                 <Phone className="w-4 h-4" />
-                <span className="text-xs font-bold text-[#c9dcce] pl-0.5 border-r border-[#2d6240] pr-2">
+                <span className="text-xs font-bold text-[#c9dcce] pl-0.5 border-r border-[#66502d] pr-2">
                   +91
                 </span>
               </div>
@@ -203,7 +219,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 value={phone}
                 onChange={handlePhoneChange}
                 placeholder="10-digit mobile number"
-                className="w-full bg-[#123620] border border-[#245937] rounded-xl pl-20 pr-3 py-3 text-sm font-medium text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c] tracking-wide"
+                className="w-full bg-[#211c16] border border-[#66502d] rounded-xl pl-20 pr-3 py-3 text-sm font-medium text-[#fcfaf6] placeholder-[#807466] focus:outline-none focus:border-[#dfb64c] tracking-wide"
                 maxLength={10}
               />
               {lookupLoading && (
@@ -212,7 +228,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 </div>
               )}
             </div>
-            <p className="text-[11px] text-[#7da088] mt-1">
+            <p className="text-[11px] text-[#a99d8e] mt-1">
               Your registered mobile number for order updates & delivery delivery.
             </p>
           </div>
@@ -223,7 +239,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
               First Name <span className="text-[#dfb64c]">*</span>
             </label>
             <div className="relative">
-              <User className="w-4 h-4 absolute left-3 top-3 text-[#799983]" />
+              <User className="w-4 h-4 absolute left-3 top-3 text-[#9d8f7e]" />
               <input
                 type="text"
                 required
@@ -258,7 +274,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
             id="customer-login-continue-btn"
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-[#dfb64c] to-[#cba135] hover:from-[#e7c35d] hover:to-[#d4af37] text-[#0a1f13] font-bold text-base py-3.5 px-4 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 cursor-pointer mt-4 disabled:opacity-50"
+            className="w-full bg-gradient-to-r from-[#dfb64c] to-[#cba135] hover:from-[#e7c35d] hover:to-[#d4af37] text-[#18130e] font-bold text-base py-3.5 px-4 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 cursor-pointer mt-4 disabled:opacity-50"
           >
             <span>{loading ? 'Connecting to Menu...' : 'Continue'}</span>
             <ArrowRight className="w-5 h-5" />
@@ -266,7 +282,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         </form>
 
         {/* Footer info note */}
-        <div className="mt-6 pt-4 border-t border-[#1b432a] text-center text-[11px] text-[#8fa897]">
+        <div className="mt-6 pt-4 border-t border-[#5b4728] text-center text-[11px] text-[#a99d8e]">
           <span>Cash on Delivery Only • Bommasandra & Surrounding Areas</span>
         </div>
       </div>
