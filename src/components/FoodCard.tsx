@@ -34,16 +34,16 @@ export const FoodCard: React.FC<FoodCardProps> = memo(({
   return (
     <div
       id={`food-card-${item.id}`}
-      className={`bg-[#0f2a1b] border ${
+      className={`bg-[#211c16] border ${
         cartQuantity > 0
-          ? 'border-[#dfb64c]'
+          ? 'border-[#e0b568]'
           : itemOutOfStock
           ? 'border-red-900/60'
-          : 'border-[#1f4a2e]'
-      } rounded-2xl overflow-hidden shadow-lg transition-all duration-300 hover:border-[#dfb64c]/70 hover:shadow-2xl flex flex-col justify-between`}
+          : 'border-[#5b4728]'
+      } rounded-2xl overflow-hidden shadow-lg transition-all duration-300 hover:border-[#e0b568]/70 hover:shadow-2xl flex flex-col justify-between`}
     >
       {/* Food Image with Watermark */}
-      <div className="relative aspect-[4/3] w-full bg-[#081a10]">
+      <div className="relative aspect-[4/3] w-full bg-[#17130f]">
         <WatermarkedImage
           src={item.imageUrl}
           alt={`Hotel Malabar ${item.name}`}
@@ -69,15 +69,15 @@ export const FoodCard: React.FC<FoodCardProps> = memo(({
           </div>
 
           {categoryName && (
-            <span className="bg-[#0a1f13]/85 backdrop-blur-md text-[#e0d6be] border border-[#214f34] text-[10px] font-medium px-2 py-0.5 rounded-md shadow-sm">
+            <span className="bg-[#18130e]/85 backdrop-blur-md text-[#e0d6be] border border-[#66502d] text-[10px] font-medium px-2 py-0.5 rounded-md shadow-sm">
               {categoryName}
             </span>
           )}
         </div>
 
         {/* Prep Time Tag */}
-        <div className="absolute top-2.5 right-2.5 z-10 bg-[#0a1f13]/85 backdrop-blur-md text-[#dfb64c] border border-[#cba135]/40 text-[10px] font-mono font-medium px-2 py-0.5 rounded-md shadow-sm flex items-center gap-1">
-          <Clock className="w-3 h-3 text-[#dfb64c]" />
+        <div className="absolute top-2.5 right-2.5 z-10 bg-[#18130e]/85 backdrop-blur-md text-[#e0b568] border border-[#b98b43]/40 text-[10px] font-mono font-medium px-2 py-0.5 rounded-md shadow-sm flex items-center gap-1">
+          <Clock className="w-3 h-3 text-[#e0b568]" />
           <span>{item.prepTimeMinutes || 10}m</span>
         </div>
 
@@ -113,7 +113,7 @@ export const FoodCard: React.FC<FoodCardProps> = memo(({
         <div>
           <div className="flex items-start justify-between gap-2 mb-1.5">
             <div className="flex-1">
-              <h3 className="font-semibold text-base sm:text-lg text-[#fcfaf6] leading-snug">
+              <h3 className="font-semibold text-base sm:text-lg text-[#f7f1e6] leading-snug">
                 {item.name}
               </h3>
               {itemOutOfStock && (
@@ -123,7 +123,7 @@ export const FoodCard: React.FC<FoodCardProps> = memo(({
               )}
             </div>
             <div className="text-right shrink-0">
-              <span className="font-bold text-base sm:text-lg text-[#dfb64c] font-mono">
+              <span className="font-bold text-base sm:text-lg text-[#e0b568] font-mono">
                 ₹{item.price}
               </span>
             </div>
@@ -137,50 +137,50 @@ export const FoodCard: React.FC<FoodCardProps> = memo(({
                   <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                   <span>{(item.averageRating || 0).toFixed(1)}</span>
                 </div>
-                <span className="text-[11px] text-[#8ea896]">
+                <span className="text-[11px] text-[#a99d8e]">
                   ({item.totalRatings} {item.totalRatings === 1 ? 'rating' : 'ratings'})
                 </span>
               </>
             ) : (
-              <div className="flex items-center gap-1 text-[11px] text-[#71917d]">
+              <div className="flex items-center gap-1 text-[11px] text-[#8f8272]">
                 <Star className="w-3 h-3 text-stone-600" />
                 <span>No ratings yet</span>
               </div>
             )}
             {item.orderCount && item.orderCount > 0 ? (
-              <span className="text-[10px] text-[#dfb64c] bg-[#143d26] border border-[#235836] px-1.5 py-0.5 rounded font-medium ml-auto">
+              <span className="text-[10px] text-[#e0b568] bg-[#2a2118] border border-[#5b4728] px-1.5 py-0.5 rounded font-medium ml-auto">
                 🔥 {item.orderCount} ordered
               </span>
             ) : null}
           </div>
 
-          <p className="text-xs text-[#a3bfae] line-clamp-2 leading-relaxed mb-4">
+          <p className="text-xs text-[#b4a89a] line-clamp-2 leading-relaxed mb-4">
             {item.description}
           </p>
         </div>
 
         {/* Add To Cart Controls (Touch-friendly minimum 44px target) */}
-        <div className="pt-2 border-t border-[#183e25] flex items-center justify-between">
-          <span className="text-[11px] text-[#7d9e89]">
+        <div className="pt-2 border-t border-[#4a3924] flex items-center justify-between">
+          <span className="text-[11px] text-[#8e8171]">
             {item.isVeg ? 'Veg Specialty' : 'Halal & Fresh'}
           </span>
 
           {canOrder ? (
             cartQuantity > 0 ? (
-              <div className="flex items-center gap-2 bg-[#123620] border border-[#dfb64c] rounded-xl p-1 shadow-sm">
+              <div className="flex items-center gap-2 bg-[#2a2118] border border-[#e0b568] rounded-xl p-1 shadow-sm">
                 <button
                   onClick={() => onUpdateQuantity(item.id, -1)}
-                  className="w-8 h-8 rounded-lg bg-[#1a472c] hover:bg-[#225c38] text-[#fdfbf7] flex items-center justify-center transition-colors cursor-pointer"
+                  className="w-8 h-8 rounded-lg bg-[#4f3d25] hover:bg-[#5a4529] text-[#f7f1e6] flex items-center justify-center transition-colors cursor-pointer"
                   title="Reduce quantity"
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </button>
-                <span className="font-mono font-bold text-sm text-[#dfb64c] min-w-[20px] text-center">
+                <span className="font-mono font-bold text-sm text-[#e0b568] min-w-[20px] text-center">
                   {cartQuantity}
                 </span>
                 <button
                   onClick={() => onUpdateQuantity(item.id, 1)}
-                  className="w-8 h-8 rounded-lg bg-[#dfb64c] hover:bg-[#ebce6b] text-[#0a1f13] flex items-center justify-center transition-colors cursor-pointer font-bold"
+                  className="w-8 h-8 rounded-lg bg-[#e0b568] hover:bg-[#edc979] text-[#18130e] flex items-center justify-center transition-colors cursor-pointer font-bold"
                   title="Increase quantity"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -190,7 +190,7 @@ export const FoodCard: React.FC<FoodCardProps> = memo(({
               <button
                 id={`add-to-cart-${item.id}`}
                 onClick={() => onAddToCart(item)}
-                className="bg-gradient-to-r from-[#dfb64c] to-[#cba135] hover:from-[#e7c35d] hover:to-[#d4af37] text-[#0a1f13] font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer min-h-[44px]"
+                className="bg-gradient-to-r from-[#e0b568] to-[#b98b43] hover:from-[#e5c273] hover:to-[#c59a50] text-[#18130e] font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer min-h-[44px]"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add to Cart</span>
