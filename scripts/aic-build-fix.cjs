@@ -93,11 +93,14 @@ replaceOnce(
   "    const order = db.createOrder({\n      customerId: user.id,\n      customerName: `${user.firstName} ${user.lastName}`.trim(),\n      customerPhone: user.phone,\n      deliveryAddress,\n      deliveryArea,\n      items,\n      specialInstructions,\n      customerLatitude: lat,\n      customerLongitude: lng,\n    });\n\n    res.status(201).json({",
   "    // Refresh the shared database immediately before creating the order so this\n    // instance does not overwrite a newer order/customer change from another instance.\n    await syncFromSupabase();\n    db.reloadFromDisk();\n\n    const order = db.createOrder({\n      customerId: user.id,\n      customerName: `${user.firstName} ${user.lastName}`.trim(),\n      customerPhone: user.phone,\n      deliveryAddress,\n      deliveryArea,\n      items,\n      specialInstructions,\n      customerLatitude: lat,\n      customerLongitude: lng,\n    });\n\n    await syncToSupabase();\n\n    res.status(201).json({"
 );
+const currentServerForAdminOrderPatch = fs.readFileSync('server.ts', 'utf8');
+if (!currentServerForAdminOrderPatch.includes('Always read the latest cloud snapshot before showing the admin order queue.')) {
 replaceOnce(
   'server.ts',
   "app.get('/api/admin/orders', requireAdminAuth, (req: Request, res: Response) => {\n  try {\n    const date = req.query.date ? String(req.query.date) : undefined;\n    const status = req.query.status ? String(req.query.status) : undefined;\n    res.json(db.getAdminOrders({ date, status }));\n  } catch (err: any) {",
   "app.get('/api/admin/orders', requireAdminAuth, async (req: Request, res: Response) => {\n  try {\n    // Always refresh the shared database before an admin order read.\n    await syncFromSupabase();\n    db.reloadFromDisk();\n\n    // Return the complete order list. The Admin Dashboard already applies\n    // the New / Accepted / Rejected / History filters on the client.\n    res.json(db.getAllOrders());\n  } catch (err: any) {"
 );
+}
 
 // Make the production SPA shell resilient to stale browser/CDN caching.
 replaceOnce(
