@@ -237,11 +237,11 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/75 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-[#0d2819] border-l border-[#235836] text-[#fcfaf6] flex flex-col justify-between h-full shadow-2xl relative overflow-y-auto">
+      <div className="w-full max-w-lg bg-[#211c16] border-l border-[#5b4728] text-[#f7f1e6] flex flex-col justify-between h-full shadow-2xl relative overflow-y-auto">
         {/* Drawer Header */}
-        <div className="p-4 border-b border-[#1b432a] flex items-center justify-between sticky top-0 bg-[#0d2819] z-10">
+        <div className="p-4 border-b border-[#5b4728] flex items-center justify-between sticky top-0 bg-[#211c16] z-10">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#143d26] border border-[#cba135]/50 flex items-center justify-center text-[#dfb64c]">
+            <div className="w-8 h-8 rounded-lg bg-[#2a2118] border border-[#b98b43]/50 flex items-center justify-center text-[#e0b568]">
               <Truck className="w-4 h-4" />
             </div>
             <div>
@@ -252,7 +252,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-[#184428] text-[#a6bfae] hover:text-[#fdfbf7] cursor-pointer"
+            className="p-1.5 rounded-full hover:bg-[#4f3d25] text-[#b7ab9c] hover:text-[#f7f1e6] cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -269,7 +269,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
 
           {/* Cart Items List */}
           {cartItems.length === 0 ? (
-            <div className="py-12 text-center text-[#8ea896]">
+            <div className="py-12 text-center text-[#a99d8e]">
               <p className="text-base font-medium mb-2">Your cart is currently empty</p>
               <p className="text-xs max-w-xs mx-auto">
                 Explore our authentic Kerala biryanis, porottas, curries and shakes to start your order.
@@ -277,7 +277,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs !text-black pb-1 border-b border-[#183e25]">
+              <div className="flex items-center justify-between text-xs !text-black pb-1 border-b border-[#4a3924]">
                 <span>Ordered Items ({cartItems.length})</span>
                 <button
                   onClick={onClearCart}
@@ -296,7 +296,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                     className={`p-3 rounded-xl flex items-center justify-between gap-3 shadow-sm border ${
                       isOutOfStock
                         ? 'bg-red-950/30 border-red-800/80'
-                        : 'bg-[#113320] border-[#214f34]'
+                        : 'bg-[#241e17] border-[#66502d]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 flex-1 min-w-0">
@@ -315,7 +315,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                       </div>
                       <div className="truncate">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-xs sm:text-sm font-semibold text-[#fcfaf6] truncate">
+                          <h4 className="text-xs sm:text-sm font-semibold text-[#f7f1e6] truncate">
                             {menuItem.name}
                           </h4>
                           {isOutOfStock && (
@@ -324,22 +324,22 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                             </span>
                           )}
                         </div>
-                        <span className="text-[11px] text-[#dfb64c] font-mono">
+                        <span className="text-[11px] text-[#e0b568] font-mono">
                           ₹{menuItem.price} × {quantity} = ₹{menuItem.price * quantity}
                         </span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      <div className="flex items-center gap-1.5 bg-[#0a1f13] border border-[#1e4c30] rounded-lg p-1">
+                      <div className="flex items-center gap-1.5 bg-[#18130e] border border-[#4f3d25] rounded-lg p-1">
                         <button
                           onClick={() => onUpdateQuantity(menuItem.id, -1)}
-                          className="w-6 h-6 rounded bg-[#163e26] hover:bg-[#1f5635] text-[#fdfbf7] flex items-center justify-center cursor-pointer"
+                          className="w-6 h-6 rounded bg-[#4a3924] hover:bg-[#5a4529] text-[#f7f1e6] flex items-center justify-center cursor-pointer"
                           title="Decrease quantity"
                         >
                           <Minus className="w-3 h-3" />
                         </button>
-                        <span className="font-mono text-xs text-[#dfb64c] font-bold px-1.5">
+                        <span className="font-mono text-xs text-[#e0b568] font-bold px-1.5">
                           {quantity}
                         </span>
                         <button
@@ -348,7 +348,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                           className={`w-6 h-6 rounded flex items-center justify-center font-bold ${
                             isOutOfStock
                               ? 'bg-stone-800 text-stone-600 cursor-not-allowed'
-                              : 'bg-[#dfb64c] hover:bg-[#ecd06b] text-[#0a1f13] cursor-pointer'
+                              : 'bg-[#e0b568] hover:bg-[#ecd06b] text-[#18130e] cursor-pointer'
                           }`}
                           title={isOutOfStock ? 'Item is out of stock' : 'Increase quantity'}
                         >
@@ -360,7 +360,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                         className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
                           isOutOfStock
                             ? 'text-red-300 bg-red-950/80 hover:bg-red-900/90 border border-red-700'
-                            : 'text-[#8ea896] hover:text-red-400 hover:bg-red-950/40'
+                            : 'text-[#a99d8e] hover:text-red-400 hover:bg-red-950/40'
                         }`}
                         title={isOutOfStock ? 'Remove unavailable item' : 'Remove item'}
                       >
@@ -384,7 +384,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                 <select
                   value={selectedAreaName}
                   onChange={(e) => setSelectedAreaName(e.target.value)}
-                  className="w-full bg-[#123620] border border-[#245937] rounded-xl px-3 py-2.5 text-xs sm:text-sm text-[#fcfaf6] focus:outline-none focus:border-[#dfb64c]"
+                  className="w-full bg-[#2a2118] border border-[#66502d] rounded-xl px-3 py-2.5 text-xs sm:text-sm text-[#f7f1e6] focus:outline-none focus:border-[#e0b568]"
                 >
                   {deliveryAreas
                     .filter((a) => a.isActive)
@@ -399,8 +399,8 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
               {/* GPS CURRENT LOCATION FEATURE (Requirement: At checkout, GPS is mandatory) */}
               <div className="bg-[#0c2417] border border-[#204e31] rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-[#fcfaf6]">
-                    <Navigation className="w-3.5 h-3.5 text-[#dfb64c]" />
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-[#f7f1e6]">
+                    <Navigation className="w-3.5 h-3.5 text-[#e0b568]" />
                     <span>Customer GPS Pin</span>
                   </div>
                   {gpsCoords && (
@@ -418,19 +418,19 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                   disabled={isLocating}
                   className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow ${
                     gpsCoords
-                      ? 'bg-[#154228] border border-[#2f7547] text-[#fcfaf6] hover:bg-[#1a5131]'
-                      : 'bg-gradient-to-r from-[#17462a] to-[#123620] hover:from-[#1d5734] hover:to-[#17462a] border border-[#dfb64c]/70 text-[#dfb64c]'
+                      ? 'bg-[#154228] border border-[#2f7547] text-[#f7f1e6] hover:bg-[#5a4529]'
+                      : 'bg-gradient-to-r from-[#4f3d25] to-[#2a2118] hover:from-[#5a4529] hover:to-[#4f3d25] border border-[#e0b568]/70 text-[#e0b568]'
                   }`}
                 >
                   {isLocating ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin text-[#dfb64c]" />
+                      <Loader2 className="w-4 h-4 animate-spin text-[#e0b568]" />
                       <span>Detecting current location...</span>
                     </>
                   ) : gpsCoords ? (
                     <>
                       <span>📍 Update GPS Location</span>
-                      <span className="font-mono text-[10px] text-[#8ea896]">
+                      <span className="font-mono text-[10px] text-[#a99d8e]">
                         ({gpsCoords.latitude.toFixed(4)}, {gpsCoords.longitude.toFixed(4)})
                       </span>
                     </>
@@ -449,7 +449,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                         ? 'bg-emerald-950/80 border border-emerald-700/80 text-emerald-200'
                         : locationMessage.type === 'error'
                         ? 'bg-amber-950/80 border border-amber-800/80 text-amber-200'
-                        : 'bg-[#113320] border border-[#215132] text-[#c9dcce]'
+                        : 'bg-[#241e17] border border-[#215132] text-[#ddd4c7]'
                     }`}
                   >
                     {locationMessage.type === 'success' ? (
@@ -457,7 +457,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                     ) : locationMessage.type === 'error' ? (
                       <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     ) : (
-                      <MapPin className="w-4 h-4 text-[#dfb64c] shrink-0 mt-0.5" />
+                      <MapPin className="w-4 h-4 text-[#e0b568] shrink-0 mt-0.5" />
                     )}
                     <div className="flex-1 text-[11px] leading-relaxed">
                       {locationMessage.text}
@@ -466,7 +466,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                           href={`https://www.google.com/maps?q=${gpsCoords.latitude},${gpsCoords.longitude}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[#dfb64c] hover:underline font-semibold mt-1 ml-1"
+                          className="inline-flex items-center gap-1 text-[#e0b568] hover:underline font-semibold mt-1 ml-1"
                         >
                           <span>Open in Google Maps</span>
                           <ExternalLink className="w-3 h-3" />
@@ -504,7 +504,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Door/Flat number, Building name, Street, Landmark"
-                  className="w-full bg-[#123620] border border-[#245937] rounded-xl p-3 text-xs sm:text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
+                  className="w-full bg-[#2a2118] border border-[#66502d] rounded-xl p-3 text-xs sm:text-sm text-[#f7f1e6] placeholder-[#6d8a76] focus:outline-none focus:border-[#e0b568]"
                 />
               </div>
 
@@ -521,21 +521,21 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                   value={specialInstructions}
                   onChange={(e) => setSpecialInstructions(e.target.value)}
                   placeholder="Type your special request here..."
-                  className="w-full bg-[#123620] border border-[#245937] rounded-xl p-3 text-xs sm:text-sm text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
+                  className="w-full bg-[#2a2118] border border-[#66502d] rounded-xl p-3 text-xs sm:text-sm text-[#f7f1e6] placeholder-[#6d8a76] focus:outline-none focus:border-[#e0b568]"
                 />
               </div>
 
               {/* Delivery Charge Rule Breakdown Card */}
-              <div className="bg-[#10301e] border border-[#245937] rounded-xl p-3.5 space-y-2 text-xs">
-                <div className="flex items-center justify-between text-[#c9dcce]">
+              <div className="bg-[#10301e] border border-[#66502d] rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex items-center justify-between text-[#ddd4c7]">
                   <span>Food Total</span>
                   <span className="font-mono font-bold text-sm">₹{foodTotal}</span>
                 </div>
 
-                <div className="flex items-center justify-between text-[#c9dcce]">
+                <div className="flex items-center justify-between text-[#ddd4c7]">
                   <div className="flex items-center gap-1">
                     <span>Delivery Charge</span>
-                    <span className="text-[10px] text-[#dfb64c] bg-[#1a442a] px-1.5 py-0.2 rounded font-mono">
+                    <span className="text-[10px] text-[#e0b568] bg-[#1a442a] px-1.5 py-0.2 rounded font-mono">
                       {distanceKm} km
                     </span>
                   </div>
@@ -549,22 +549,22 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                 </div>
 
                 {/* Formula Explanation */}
-                <div className="p-2 bg-[#0a1f13] rounded-lg text-[10px] text-[#9bb5a4] space-y-0.5 border border-[#183e25]">
-                  <div className="text-[#dfb64c] font-semibold">Delivery Pricing Policy:</div>
+                <div className="p-2 bg-[#18130e] rounded-lg text-[10px] text-[#9bb5a4] space-y-0.5 border border-[#4a3924]">
+                  <div className="text-[#e0b568] font-semibold">Delivery Pricing Policy:</div>
                   <div>• First 2 km: <strong>FREE DELIVERY</strong></div>
                   <div>
                     • After 2 km: <strong>₹50</strong> per additional started km
                   </div>
                   {extraKm > 0 && (
-                    <div className="text-[#dfb64c] font-mono pt-1">
+                    <div className="text-[#e0b568] font-mono pt-1">
                       Distance: {distanceKm} km (2 km free + {extraKm.toFixed(1)} km extra = {startedExtraKm} started km × ₹50 = ₹{deliveryCharge})
                     </div>
                   )}
                 </div>
 
-                <div className="pt-2 border-t border-[#1e492f] flex items-center justify-between text-sm sm:text-base font-bold text-[#fdfbf7]">
+                <div className="pt-2 border-t border-[#1e492f] flex items-center justify-between text-sm sm:text-base font-bold text-[#f7f1e6]">
                   <span>Grand Total</span>
-                  <span className="font-mono text-[#dfb64c] text-lg">₹{grandTotal}</span>
+                  <span className="font-mono text-[#e0b568] text-lg">₹{grandTotal}</span>
                 </div>
               </div>
 
@@ -614,15 +614,15 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
               )}
 
               {/* CASH ON DELIVERY ONLY BADGE */}
-              <div className="p-3.5 bg-gradient-to-r from-[#123620] to-[#17462a] border-2 border-[#dfb64c]/60 rounded-xl flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-[#dfb64c] text-[#0a1f13] flex items-center justify-center shrink-0">
+              <div className="p-3.5 bg-gradient-to-r from-[#2a2118] to-[#4f3d25] border-2 border-[#e0b568]/60 rounded-xl flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[#e0b568] text-[#18130e] flex items-center justify-center shrink-0">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-[#dfb64c] uppercase tracking-wider">
+                  <div className="text-xs font-bold text-[#e0b568] uppercase tracking-wider">
                     Payment Method: Cash on Delivery Only
                   </div>
-                  <div className="text-[11px] text-[#c9dcce]">
+                  <div className="text-[11px] text-[#ddd4c7]">
                     Pay cash directly to the delivery personnel upon food arrival. No online prepayment required.
                   </div>
                 </div>
@@ -633,7 +633,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
 
         {/* Drawer Footer */}
         {cartItems.length > 0 && (
-          <div className="p-4 border-t border-[#1b432a] bg-[#0d2819] sticky bottom-0 z-10 space-y-2">
+          <div className="p-4 border-t border-[#5b4728] bg-[#211c16] sticky bottom-0 z-10 space-y-2">
             <button
               id="proceed-checkout-btn"
               disabled={!isMinOrderMet || !isRestaurantOpen || hasOutOfStock}
@@ -644,8 +644,8 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                   : hasOutOfStock
                   ? 'bg-red-950/70 border border-red-700 text-red-300 cursor-not-allowed opacity-90'
                   : !isMinOrderMet
-                  ? 'bg-[#123620] text-stone-400 border border-[#214f34] cursor-not-allowed opacity-60'
-                  : 'bg-gradient-to-r from-[#dfb64c] to-[#cba135] hover:from-[#e8c560] hover:to-[#d7b23d] text-[#0a1f13] cursor-pointer'
+                  ? 'bg-[#2a2118] text-stone-400 border border-[#66502d] cursor-not-allowed opacity-60'
+                  : 'bg-gradient-to-r from-[#e0b568] to-[#b98b43] hover:from-[#e8c560] hover:to-[#d7b23d] text-[#18130e] cursor-pointer'
               }`}
             >
               <span>
@@ -663,39 +663,39 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
         {/* ORDER CONFIRMATION MODAL */}
         {showConfirmModal && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="w-full max-w-md bg-[#0e2a1b] border-2 border-[#dfb64c] rounded-2xl p-6 text-[#fdfbf7] shadow-2xl space-y-4">
-              <div className="text-center pb-2 border-b border-[#1b432a]">
-                <span className="font-brand text-xl font-bold text-[#fcfaf6] block">
+            <div className="w-full max-w-md bg-[#211c16] border-2 border-[#e0b568] rounded-2xl p-6 text-[#f7f1e6] shadow-2xl space-y-4">
+              <div className="text-center pb-2 border-b border-[#5b4728]">
+                <span className="font-brand text-xl font-bold text-[#f7f1e6] block">
                   Confirm Hotel Malabar Order
                 </span>
-                <span className="text-xs text-[#dfb64c]">Cash on Delivery</span>
+                <span className="text-xs text-[#e0b568]">Cash on Delivery</span>
               </div>
 
-              <div className="text-xs space-y-2 bg-[#091a10] p-3 rounded-xl border border-[#1b432a]">
+              <div className="text-xs space-y-2 bg-[#17130f] p-3 rounded-xl border border-[#5b4728]">
                 <div className="flex justify-between">
-                  <span className="text-[#8ea896]">Customer:</span>
-                  <span className="font-semibold text-[#fcfaf6]">{user.firstName} {user.lastName}</span>
+                  <span className="text-[#a99d8e]">Customer:</span>
+                  <span className="font-semibold text-[#f7f1e6]">{user.firstName} {user.lastName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#8ea896]">Phone:</span>
-                  <span className="font-mono text-[#dfb64c]">{user.phone}</span>
+                  <span className="text-[#a99d8e]">Phone:</span>
+                  <span className="font-mono text-[#e0b568]">{user.phone}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#8ea896]">Delivery Area:</span>
+                  <span className="text-[#a99d8e]">Delivery Area:</span>
                   <span>{selectedAreaName} ({distanceKm} km)</span>
                 </div>
                 <div>
-                  <span className="text-[#8ea896] block mb-0.5">Address:</span>
-                  <span className="text-[#fcfaf6] block bg-[#123620] p-2 rounded border border-[#1f4e30]">
+                  <span className="text-[#a99d8e] block mb-0.5">Address:</span>
+                  <span className="text-[#f7f1e6] block bg-[#2a2118] p-2 rounded border border-[#1f4e30]">
                     {address}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[#8ea896] block mb-0.5">Special Instructions:</span>
+                  <span className="text-[#a99d8e] block mb-0.5">Special Instructions:</span>
                   <span className={`block p-2 rounded border text-xs ${
                     specialInstructions.trim()
-                      ? 'text-[#dfb64c] bg-[#123620] border-[#245937] font-medium'
-                      : 'text-[#8ea896] bg-[#0c2417] border-[#1b432a] italic'
+                      ? 'text-[#e0b568] bg-[#2a2118] border-[#66502d] font-medium'
+                      : 'text-[#a99d8e] bg-[#0c2417] border-[#5b4728] italic'
                   }`}>
                     {specialInstructions.trim() || 'No special instructions'}
                   </span>
@@ -707,12 +707,12 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                         <span>GPS Pin Attached:</span>
                       </span>
-                      <span className="font-mono text-[#fcfaf6]">
+                      <span className="font-mono text-[#f7f1e6]">
                         {gpsCoords.latitude.toFixed(5)}, {gpsCoords.longitude.toFixed(5)}
                       </span>
                     </div>
                   ) : (
-                    <div className="flex justify-between items-center bg-[#123620] p-1.5 rounded text-[11px] text-[#8ea896]">
+                    <div className="flex justify-between items-center bg-[#2a2118] p-1.5 rounded text-[11px] text-[#a99d8e]">
                       <span>GPS Pin:</span>
                       <span>Not attached</span>
                     </div>
@@ -723,25 +723,25 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
               {/* Items summary */}
               <div className="max-h-36 overflow-y-auto space-y-1.5 text-xs pr-1">
                 {cartItems.map((ci) => (
-                  <div key={ci.menuItem.id} className="flex justify-between text-[#c9dcce]">
+                  <div key={ci.menuItem.id} className="flex justify-between text-[#ddd4c7]">
                     <span>{ci.quantity}x {ci.menuItem.name}</span>
                     <span className="font-mono">₹{ci.menuItem.price * ci.quantity}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="border-t border-[#1b432a] pt-2 space-y-1 text-xs">
-                <div className="flex justify-between text-[#8ea896]">
+              <div className="border-t border-[#5b4728] pt-2 space-y-1 text-xs">
+                <div className="flex justify-between text-[#a99d8e]">
                   <span>Food Total:</span>
                   <span className="font-mono">₹{foodTotal}</span>
                 </div>
-                <div className="flex justify-between text-[#8ea896]">
+                <div className="flex justify-between text-[#a99d8e]">
                   <span>Delivery Fee ({distanceKm} km):</span>
                   <span className="font-mono">
                     {deliveryCharge === 0 ? 'FREE' : `₹${deliveryCharge}`}
                   </span>
                 </div>
-                <div className="flex justify-between text-base font-bold text-[#dfb64c] pt-1 border-t border-[#1b432a]">
+                <div className="flex justify-between text-base font-bold text-[#e0b568] pt-1 border-t border-[#5b4728]">
                   <span>Grand Total (COD):</span>
                   <span className="font-mono">₹{grandTotal}</span>
                 </div>
@@ -752,7 +752,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => setShowConfirmModal(false)}
-                  className="flex-1 bg-[#123620] hover:bg-[#184428] text-[#c9dcce] py-3 rounded-xl text-xs font-semibold cursor-pointer"
+                  className="flex-1 bg-[#2a2118] hover:bg-[#4f3d25] text-[#ddd4c7] py-3 rounded-xl text-xs font-semibold cursor-pointer"
                 >
                   Edit Order
                 </button>
@@ -761,7 +761,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                   id="confirm-place-order-btn"
                   disabled={isSubmitting}
                   onClick={handlePlaceOrder}
-                  className="flex-1 bg-gradient-to-r from-[#dfb64c] to-[#cba135] text-[#0a1f13] font-bold py-3 rounded-xl text-xs shadow hover:from-[#e8c560] cursor-pointer disabled:opacity-50"
+                  className="flex-1 bg-gradient-to-r from-[#e0b568] to-[#b98b43] text-[#18130e] font-bold py-3 rounded-xl text-xs shadow hover:from-[#e8c560] cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? 'Submitting Order...' : 'Confirm Order (COD)'}
                 </button>
