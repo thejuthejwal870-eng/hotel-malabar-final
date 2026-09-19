@@ -197,7 +197,7 @@ export const AdminProfileManager: React.FC<AdminProfileManagerProps> = ({
               <span>Restaurant Photos & Watermarked Branding</span>
             </h3>
             <p className="text-[11px] text-[#8ea896]">
-              Upload or replace restaurant logo and showcase photo. All images are automatically branded with the required watermark.
+              Upload the hotel logo and the exact hotel/hero photo shown on the customer homepage. All images are automatically branded with the required watermark.
             </p>
           </div>
 
@@ -272,7 +272,7 @@ export const AdminProfileManager: React.FC<AdminProfileManagerProps> = ({
             {/* COVER / SHOWCASE PHOTO CARD */}
             <div className="space-y-3">
               <label className="block text-xs font-semibold text-[#dfb64c]">
-                Restaurant Showcase / Cover Photo
+                Hotel Hero / Showcase Photo
               </label>
 
               <div className="space-y-2">
@@ -288,7 +288,7 @@ export const AdminProfileManager: React.FC<AdminProfileManagerProps> = ({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="inline-flex items-center gap-1.5 bg-[#143d26] hover:bg-[#1d5435] text-[#dfb64c] border border-[#cba135]/50 px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors shadow">
                     <Upload className="w-3.5 h-3.5" />
-                    <span>{coverUploading ? 'Watermarking...' : 'Upload / Replace Cover Photo'}</span>
+                    <span>{coverUploading ? 'Watermarking...' : 'Upload Your Hotel Photo'}</span>
                     <input
                       type="file"
                       accept="image/*"
