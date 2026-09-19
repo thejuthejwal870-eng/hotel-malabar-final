@@ -1,0 +1,23 @@
+/* Hotel Malabar Admin — premium dark brown / cream / gold theme. */
+.admin-page-shell{
+  --admin-bg:#151210;--admin-bg-deep:#110f0d;--admin-panel:#211c16;--admin-panel-2:#241e17;--admin-panel-3:#2a2118;
+  --admin-gold:#e0b568;--admin-gold-deep:#b98b43;--admin-cream:#f7f1e6;--admin-muted:#a99d8e;--admin-border:#5b4728;
+  background:var(--admin-bg)!important;color:var(--admin-cream)!important;
+}
+.admin-page-shell header[class*="bg-[#0f2d1c]"]{background:var(--admin-bg-deep)!important;border-color:var(--admin-border)!important}
+.admin-page-shell aside{background:var(--admin-bg-deep)!important;border-color:var(--admin-border)!important}
+.admin-page-shell main,.admin-page-shell [class*="bg-[#06160c]"]{background:var(--admin-bg)!important}
+.admin-page-shell [class*="bg-[#0f2d1c]"],.admin-page-shell [class*="bg-[#123620]"],.admin-page-shell [class*="bg-[#143d26]"],.admin-page-shell [class*="bg-[#113320]"]{background:var(--admin-panel)!important}
+.admin-page-shell [class*="bg-[#0b2b1a]"],.admin-page-shell [class*="bg-[#153d27]"]{background:var(--admin-panel-2)!important}
+.admin-page-shell [class*="bg-[#173a27]"],.admin-page-shell [class*="bg-[#183e25]"]{background:var(--admin-panel-3)!important}
+.admin-page-shell [class*="border-[#235836]"],.admin-page-shell [class*="border-[#214f34]"],.admin-page-shell [class*="border-[#245937]"],.admin-page-shell [class*="border-[#1b432a]"],.admin-page-shell [class*="border-[#163823]"]{border-color:var(--admin-border)!important}
+.admin-page-shell [class*="text-[#dfb64c]"],.admin-page-shell [class*="text-[#dfb449]"],.admin-page-shell [class*="text-[#d7b24c]"],.admin-page-shell [class*="text-[#c9a338]"]{color:var(--admin-gold)!important}
+.admin-page-shell [class*="text-[#fcfaf6]"],.admin-page-shell [class*="text-[#fdfbf7]"]{color:var(--admin-cream)!important}
+.admin-page-shell [class*="text-[#8ea896]"],.admin-page-shell [class*="text-[#a6bfae]"],.admin-page-shell [class*="text-[#71917d]"],.admin-page-shell [class*="text-[#7d9e89]"]{color:var(--admin-muted)!important}
+.admin-page-shell [class*="bg-[#dfb64c]"],.admin-page-shell [class*="bg-[#d8b13e]"],.admin-page-shell [class*="bg-[#cba135]"]{background:var(--admin-gold)!important;color:#18130e!important}
+.admin-page-shell [class*="border-[#cba135]"],.admin-page-shell [class*="border-[#d6ae3a]"]{border-color:var(--admin-gold-deep)!important}
+.admin-page-shell input,.admin-page-shell textarea,.admin-page-shell select{background:#241e17!important;border-color:#66502d!important;color:var(--admin-cream)!important}
+.admin-page-shell input::placeholder,.admin-page-shell textarea::placeholder{color:#8f8272!important}
+.admin-page-shell button:hover{border-color:var(--admin-gold)!important}
+.admin-page-shell .bg-emerald-950{background:#302516!important}.admin-page-shell .border-emerald-500{border-color:#a57a35!important}
+@media(max-width:768px){.admin-page-shell{font-size:12px}.admin-page-shell aside{box-shadow:0 12px 30px rgba(0,0,0,.35)}}
