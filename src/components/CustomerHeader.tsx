@@ -37,7 +37,7 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = memo(({ user, resta
         </button>
 
         <div className="flex items-center gap-2.5 min-w-0 shrink-0">
-          {restaurantProfile?.logoUrl ? <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg overflow-hidden border border-[#d3a955] bg-white shrink-0"><WatermarkedImage src={restaurantProfile.logoUrl} alt={restaurantName} className="w-full h-full" watermarkSize="sm" /></div> : <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg border border-[#d3a955] bg-[#f7f3e9] flex items-center justify-center shrink-0"><UtensilsCrossed className="w-5 h-5 text-[#80602f]" /></div>}
+          {restaurantProfile?.logoUrl ? <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg overflow-hidden border border-[#d3a955] bg-white shrink-0"><img src={restaurantProfile.logoUrl} alt={`${restaurantName} logo`} className="w-full h-full object-contain p-1" onError={(e) => { e.currentTarget.style.display = 'none'; }} /></div> : <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg border border-[#d3a955] bg-[#f7f3e9] flex items-center justify-center shrink-0"><UtensilsCrossed className="w-5 h-5 text-[#80602f]" /></div>}
           <div className="min-w-0"><div className="font-brand text-sm sm:text-base font-bold tracking-wide truncate">{restaurantName}</div><div className="hidden sm:block text-[8px] uppercase tracking-[0.18em] text-[#e0b568] truncate">{tagline}</div></div>
         </div>
 
