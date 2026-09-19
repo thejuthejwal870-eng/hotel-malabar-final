@@ -877,9 +877,13 @@ app.post('/api/admin/menu/categories/:id/move', requireAdminAuth, (req: Request,
 });
 
 // Restaurant Profile Management
-app.put('/api/admin/profile', requireAdminAuth, (req: Request, res: Response) => {
+app.put('/api/admin/profile', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const updated = db.updateRestaurantProfile(req.body);
+    const cloudSaved = await syncToSupabase();
+    if (!cloudSaved) {
+      return res.status(503).json({ error: 'Hotel profile could not be saved to the cloud. Please try again.' });
+    }
     res.json({
       profile: updated,
       message: 'Hotel Malabar profile updated successfully.',
