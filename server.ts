@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import jwt from 'jsonwebtoken';
 import { db } from './server/db.ts';
+import { syncFromSupabase, syncToSupabase } from './server/supabase-sync.ts';
 import { extractMenuItemsFromPhotos } from './server/gemini.ts';
 
 export const app = express();
@@ -384,6 +385,11 @@ app.post('/api/orders', requireCustomerAuth, (req: AuthenticatedRequest, res: Re
       lng = customerLongitude;
     }
 
+    // Refresh the shared cloud snapshot before creating an order so one server
+    // instance cannot overwrite a newer order from another instance.
+    await syncFromSupabase();
+    db.reloadFromDisk();
+
     const order = db.createOrder({
       customerId: user.id,
       customerName: `${user.firstName} ${user.lastName}`.trim(),
@@ -396,6 +402,12 @@ app.post('/api/orders', requireCustomerAuth, (req: AuthenticatedRequest, res: Re
       customerLongitude: lng,
     });
 
+    // Persist the new order to the cloud before responding to the customer.
+    const cloudSaved = await syncToSupabase();
+    if (!cloudSaved) {
+      return res.status(503).json({ error: 'Order could not be saved to the cloud. Please try again.' });
+    }
+
     res.status(201).json({
       message: `Order ${order.orderNumber} placed successfully! Preparing for cash on delivery.`,
       order,
@@ -405,8 +417,10 @@ app.post('/api/orders', requireCustomerAuth, (req: AuthenticatedRequest, res: Re
   }
 });
 
-app.get('/api/orders', requireCustomerAuth, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    await syncFromSupabase();
+    db.reloadFromDisk();
     const orders = db.getCustomerOrders(req.user!.id);
     res.json(orders);
   } catch (err: any) {
@@ -612,8 +626,11 @@ app.get('/api/admin/config-status', (req: Request, res: Response) => {
 // ADMIN ORDERS / SALES / CUSTOMERS
 // ==========================================
 
-app.get('/api/admin/orders', requireAdminAuth, (req: Request, res: Response) => {
+app.get('/api/admin/orders', requireAdminAuth, async (req: Request, res: Response) => {
   try {
+    // Always read the latest cloud snapshot before showing the admin order queue.
+    await syncFromSupabase();
+    db.reloadFromDisk();
     const date = req.query.date ? String(req.query.date) : undefined;
     const status = req.query.status ? String(req.query.status) : undefined;
     res.json(db.getAdminOrders({ date, status }));
