@@ -237,8 +237,8 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
   if (loading || !order) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-        <div className="bg-[#0e2a1b] p-8 rounded-2xl text-center text-[#fdfbf7] border border-[#235836] shadow-2xl">
-          <RefreshCw className="w-8 h-8 text-[#dfb64c] animate-spin mx-auto mb-3" />
+        <div className="bg-[#211c16] p-8 rounded-2xl text-center text-[#f7f1e6] border border-[#5b4728] shadow-2xl">
+          <RefreshCw className="w-8 h-8 text-[#e0b568] animate-spin mx-auto mb-3" />
           <p className="text-sm font-medium">Connecting to Hotel Malabar Kitchen...</p>
         </div>
       </div>
@@ -255,11 +255,11 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-md bg-[#0e2a1b] border-2 border-[#26623c] rounded-2xl shadow-2xl text-[#fdfbf7] p-5 sm:p-7 my-6 max-h-[92vh] overflow-y-auto">
+      <div className="relative w-full max-w-md bg-[#211c16] border-2 border-[#26623c] rounded-2xl shadow-2xl text-[#f7f1e6] p-5 sm:p-7 my-6 max-h-[92vh] overflow-y-auto">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-[#a6bfae] hover:text-[#fdfbf7] p-1.5 rounded-full hover:bg-[#1a442b] transition-colors cursor-pointer"
+          className="absolute top-4 right-4 text-[#b7ab9c] hover:text-[#f7f1e6] p-1.5 rounded-full hover:bg-[#1a442b] transition-colors cursor-pointer"
           title="Close tracking"
         >
           <X className="w-5 h-5" />
@@ -268,14 +268,14 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
         {/* ========================================================================= */}
         {/* CARD HEADER (Requirement 6: Clear customer order tracking card)          */}
         {/* ========================================================================= */}
-        <div className="text-center pb-4 border-b border-[#1b432a]">
-          <div className="inline-flex items-center gap-1.5 bg-[#143d26] border border-[#cba135]/60 px-3 py-1 rounded-full text-xs font-mono font-bold text-[#dfb64c] mb-1.5 shadow-sm">
+        <div className="text-center pb-4 border-b border-[#5b4728]">
+          <div className="inline-flex items-center gap-1.5 bg-[#2a2118] border border-[#b98b43]/60 px-3 py-1 rounded-full text-xs font-mono font-bold text-[#e0b568] mb-1.5 shadow-sm">
             <span>Order {order.orderNumber}</span>
           </div>
-          <h2 className="font-brand text-2xl font-bold tracking-wide text-[#fdfbf7]">
+          <h2 className="font-brand text-2xl font-bold tracking-wide text-[#f7f1e6]">
             HOTEL MALABAR
           </h2>
-          <p className="text-[11px] text-[#8ea896] mt-0.5">
+          <p className="text-[11px] text-[#a99d8e] mt-0.5">
             Placed at{' '}
             {new Date(order.createdAt).toLocaleTimeString('en-IN', {
               hour: 'numeric',
@@ -312,7 +312,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
           /* ========================================================================= */
           <div className="my-4 space-y-4">
             {/* Step Progress Checklist (Requirement 6) */}
-            <div className="bg-[#091a10] border border-[#1b432a] rounded-2xl p-4 shadow-inner">
+            <div className="bg-[#17130f] border border-[#5b4728] rounded-2xl p-4 shadow-inner">
               <div className="space-y-2.5">
                 {TRACKING_STEPS.map((step, idx) => {
                   const isCompleted = currentStepIndex > idx;
@@ -324,9 +324,9 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                       key={step.key}
                       className={`flex items-center justify-between py-1 px-2 rounded-lg transition-all ${
                         isCurrent
-                          ? 'bg-[#153e26] border border-[#dfb64c]/40 text-[#dfb64c]'
+                          ? 'bg-[#153e26] border border-[#e0b568]/40 text-[#e0b568]'
                           : isCompleted
-                          ? 'text-[#fcfaf6]'
+                          ? 'text-[#f7f1e6]'
                           : 'text-[#64846e]'
                       }`}
                     >
@@ -336,7 +336,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                           {isCompleted ? (
                             <span className="text-emerald-400 text-sm">✓</span>
                           ) : isCurrent ? (
-                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#dfb64c] animate-ping" />
+                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#e0b568] animate-ping" />
                           ) : (
                             <span className="text-xs text-[#526f5b]">○</span>
                           )}
@@ -345,7 +345,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                         {/* Step Label */}
                         <span
                           className={`text-xs sm:text-sm font-semibold ${
-                            isCurrent ? 'text-[#dfb64c]' : isCompleted ? 'text-[#fcfaf6]' : 'text-[#6b8c75]'
+                            isCurrent ? 'text-[#e0b568]' : isCompleted ? 'text-[#f7f1e6]' : 'text-[#6b8c75]'
                           }`}
                         >
                           {step.label}
@@ -353,7 +353,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                       </div>
 
                       {isCurrent && (
-                        <span className="text-[10px] font-mono uppercase bg-[#1d4f32] text-[#dfb64c] px-2 py-0.5 rounded-full font-bold border border-[#dfb64c]/30">
+                        <span className="text-[10px] font-mono uppercase bg-[#1d4f32] text-[#e0b568] px-2 py-0.5 rounded-full font-bold border border-[#e0b568]/30">
                           Active
                         </span>
                       )}
@@ -367,9 +367,9 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
             {/* LIVE COUNTDOWN & STATUS BANNER (Requirements 4, 5, 6)                     */}
             {/* ========================================================================= */}
             {normalizedStatus === 'NEW' && (
-              <div className="p-4 bg-[#123620] border border-[#2b6540] rounded-2xl text-center shadow-md">
-                <div className="flex items-center justify-center gap-2 text-[#dfb64c] font-bold text-sm">
-                  <Clock className="w-4 h-4 animate-spin text-[#dfb64c]" />
+              <div className="p-4 bg-[#2a2118] border border-[#2b6540] rounded-2xl text-center shadow-md">
+                <div className="flex items-center justify-center gap-2 text-[#e0b568] font-bold text-sm">
+                  <Clock className="w-4 h-4 animate-spin text-[#e0b568]" />
                   <span>Order Received by Kitchen</span>
                 </div>
                 <p className="text-xs text-[#b8d1c0] mt-1">
@@ -379,7 +379,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
             )}
 
             {(normalizedStatus === 'ACCEPTED' || normalizedStatus === 'PREPARING') && timerInfo && (
-              <div className="p-5 bg-gradient-to-b from-[#143e27] via-[#113521] to-[#0d2a1a] border-2 border-[#dfb64c] rounded-2xl text-center shadow-xl space-y-3">
+              <div className="p-5 bg-gradient-to-b from-[#143e27] via-[#241e17] to-[#0d2a1a] border-2 border-[#e0b568] rounded-2xl text-center shadow-xl space-y-3">
                 <div className="text-[11px] uppercase tracking-widest text-[#a8c7b2] font-semibold">
                   {normalizedStatus === 'ACCEPTED' ? 'Order Accepted' : 'Food In Preparation'}
                 </div>
@@ -389,29 +389,29 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                     <div className="text-emerald-300 font-brand text-xl sm:text-2xl font-extrabold tracking-wide animate-pulse">
                       Your food should be ready now.
                     </div>
-                    <p className="text-xs text-[#c9dcce] mt-1">
+                    <p className="text-xs text-[#ddd4c7] mt-1">
                       Our kitchen is putting the final touches and packing your meal hot!
                     </p>
                   </div>
                 ) : (
                   <div className="py-1">
-                    <div className="text-xs text-[#dfb64c] font-medium">Food will be ready in</div>
-                    <div className="font-brand text-3xl sm:text-4xl font-extrabold text-[#fdfbf7] tracking-wider my-1">
+                    <div className="text-xs text-[#e0b568] font-medium">Food will be ready in</div>
+                    <div className="font-brand text-3xl sm:text-4xl font-extrabold text-[#f7f1e6] tracking-wider my-1">
                       {timerInfo.remainingMinutes}{' '}
-                      <span className="text-lg font-bold text-[#dfb64c]">
+                      <span className="text-lg font-bold text-[#e0b568]">
                         {timerInfo.remainingMinutes === 1 ? 'MINUTE' : 'MINUTES'}
                       </span>
                     </div>
-                    <div className="text-[11px] font-mono text-[#8ea896]">
+                    <div className="text-[11px] font-mono text-[#a99d8e]">
                       ({Math.floor(timerInfo.remainingSeconds / 60)}m {timerInfo.remainingSeconds % 60}s remaining)
                     </div>
                   </div>
                 )}
 
                 {timerInfo.estimatedReadyTimeStr && (
-                  <div className="pt-2 border-t border-[#1f4e32] flex items-center justify-between text-xs text-[#c9dcce]">
+                  <div className="pt-2 border-t border-[#1f4e32] flex items-center justify-between text-xs text-[#ddd4c7]">
                     <span>Food preparation: {timerInfo.prepMins} MINUTES</span>
-                    <span className="font-mono text-[#dfb64c] font-bold">
+                    <span className="font-mono text-[#e0b568] font-bold">
                       Ready: {timerInfo.estimatedReadyTimeStr}
                     </span>
                   </div>
@@ -468,20 +468,20 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
             {/* RATE EACH ORDERED FOOD ITEM (Requirement 1)                               */}
             {/* ========================================================================= */}
             {normalizedStatus === 'DELIVERED' && (
-              <div className="mt-4 bg-[#091a10] border-2 border-[#dfb64c]/70 rounded-2xl p-4 shadow-xl space-y-4">
-                <div className="flex items-center justify-between pb-2.5 border-b border-[#1b432a]">
+              <div className="mt-4 bg-[#17130f] border-2 border-[#e0b568]/70 rounded-2xl p-4 shadow-xl space-y-4">
+                <div className="flex items-center justify-between pb-2.5 border-b border-[#5b4728]">
                   <div className="flex items-center gap-2">
                     <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
                     <div>
-                      <h4 className="font-brand font-bold text-sm text-[#fcfaf6]">
+                      <h4 className="font-brand font-bold text-sm text-[#f7f1e6]">
                         Rate Your Food Items
                       </h4>
-                      <p className="text-[11px] text-[#8ea896]">
+                      <p className="text-[11px] text-[#a99d8e]">
                         How was the taste? Rate each item (1 to 5 stars)
                       </p>
                     </div>
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-[#143d26] text-[#dfb64c] border border-[#245937] px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-[#2a2118] text-[#e0b568] border border-[#66502d] px-2 py-0.5 rounded-full">
                     Verified Order
                   </span>
                 </div>
@@ -496,14 +496,14 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                     return (
                       <div
                         key={item.id || item.itemId}
-                        className="bg-[#0f2d1c] border border-[#1f4e30] rounded-xl p-3 space-y-2.5"
+                        className="bg-[#211c16] border border-[#1f4e30] rounded-xl p-3 space-y-2.5"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div>
-                            <span className="font-bold text-xs sm:text-sm text-[#fcfaf6] block">
+                            <span className="font-bold text-xs sm:text-sm text-[#f7f1e6] block">
                               {item.itemName}
                             </span>
-                            <span className="text-[11px] text-[#8ea896]">
+                            <span className="text-[11px] text-[#a99d8e]">
                               Qty: {item.quantity} • ₹{item.price} each
                             </span>
                           </div>
@@ -517,7 +517,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                         </div>
 
                         {existingRating ? (
-                          <div className="bg-[#08170e] border border-emerald-800/30 rounded-lg p-2 text-xs space-y-1">
+                          <div className="bg-[#17130f] border border-emerald-800/30 rounded-lg p-2 text-xs space-y-1">
                             <div className="flex items-center gap-1 text-amber-400">
                               {[1, 2, 3, 4, 5].map((s) => (
                                 <Star
@@ -534,7 +534,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                               </span>
                             </div>
                             {existingRating.review && (
-                              <p className="text-[11px] text-[#a6bfae] italic">
+                              <p className="text-[11px] text-[#b7ab9c] italic">
                                 "{existingRating.review}"
                               </p>
                             )}
@@ -595,7 +595,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                                   );
                                 })}
                               </div>
-                              <span className="text-xs font-bold text-[#dfb64c] font-mono">
+                              <span className="text-xs font-bold text-[#e0b568] font-mono">
                                 {input.rating || 5} of 5 Stars
                               </span>
                             </div>
@@ -617,7 +617,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                               }
                               placeholder="Write a brief comment (optional)..."
                               maxLength={160}
-                              className="w-full bg-[#08170e] border border-[#235836] rounded-lg px-2.5 py-1.5 text-xs text-[#fcfaf6] placeholder-[#6d8a76] focus:outline-none focus:border-[#dfb64c]"
+                              className="w-full bg-[#17130f] border border-[#5b4728] rounded-lg px-2.5 py-1.5 text-xs text-[#f7f1e6] placeholder-[#6d8a76] focus:outline-none focus:border-[#e0b568]"
                             />
 
                             {error && (
@@ -630,7 +630,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                               type="button"
                               onClick={() => handleSubmitRating(item.itemId)}
                               disabled={isSubmitting}
-                              className="w-full py-1.5 px-3 rounded-lg bg-[#dfb64c] hover:bg-[#ebd074] disabled:opacity-50 text-[#0a1f13] text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow"
+                              className="w-full py-1.5 px-3 rounded-lg bg-[#e0b568] hover:bg-[#ebd074] disabled:opacity-50 text-[#18130e] text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow"
                             >
                               {isSubmitting ? (
                                 <>
@@ -639,7 +639,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                                 </>
                               ) : (
                                 <>
-                                  <Star className="w-3.5 h-3.5 fill-[#0a1f13]" />
+                                  <Star className="w-3.5 h-3.5 fill-[#18130e]" />
                                   <span>Submit Rating</span>
                                 </>
                               )}
@@ -658,53 +658,53 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
         {/* ========================================================================= */}
         {/* ORDER DETAILS & RECEIPT SUMMARY                                           */}
         {/* ========================================================================= */}
-        <div className="bg-[#091a10] border border-[#1b432a] rounded-2xl p-4 text-xs space-y-3 mt-4">
-          <div className="flex items-center justify-between pb-2 border-b border-[#1b432a]">
-            <span className="font-semibold text-[#dfb64c] flex items-center gap-1.5">
+        <div className="bg-[#17130f] border border-[#5b4728] rounded-2xl p-4 text-xs space-y-3 mt-4">
+          <div className="flex items-center justify-between pb-2 border-b border-[#5b4728]">
+            <span className="font-semibold text-[#e0b568] flex items-center gap-1.5">
               <Receipt className="w-3.5 h-3.5" />
               <span>Bill Summary</span>
             </span>
-            <span className="bg-[#123620] text-[#e0d8c7] px-2 py-0.5 rounded font-mono text-[10px]">
+            <span className="bg-[#2a2118] text-[#e0d8c7] px-2 py-0.5 rounded font-mono text-[10px]">
               Cash on Delivery
             </span>
           </div>
 
           <div className="space-y-1.5">
             {order.items.map((item) => (
-              <div key={item.id} className="flex justify-between text-[#c9dcce]">
+              <div key={item.id} className="flex justify-between text-[#ddd4c7]">
                 <span>
-                  <strong className="text-[#dfb64c] mr-1">{item.quantity}x</strong> {item.itemName}
+                  <strong className="text-[#e0b568] mr-1">{item.quantity}x</strong> {item.itemName}
                 </span>
                 <span className="font-mono">₹{item.subtotal}</span>
               </div>
             ))}
           </div>
 
-          <div className="pt-2 border-t border-[#1b432a] space-y-1">
-            <div className="flex justify-between text-[#8ea896]">
+          <div className="pt-2 border-t border-[#5b4728] space-y-1">
+            <div className="flex justify-between text-[#a99d8e]">
               <span>Food Total:</span>
               <span className="font-mono">₹{order.foodTotal}</span>
             </div>
-            <div className="flex justify-between text-[#8ea896]">
+            <div className="flex justify-between text-[#a99d8e]">
               <span>Delivery Charge ({order.deliveryDistanceKm} km):</span>
               <span className="font-mono">
                 {order.deliveryCharge === 0 ? 'FREE' : `₹${order.deliveryCharge}`}
               </span>
             </div>
-            <div className="flex justify-between text-sm font-bold text-[#dfb64c] pt-1 border-t border-[#1b432a]">
+            <div className="flex justify-between text-sm font-bold text-[#e0b568] pt-1 border-t border-[#5b4728]">
               <span>Grand Total:</span>
               <span className="font-mono">₹{order.grandTotal}</span>
             </div>
           </div>
 
           {/* Delivery Location Details */}
-          <div className="pt-2 border-t border-[#1b432a] text-[11px] text-[#9bb5a4]">
-            <span className="font-semibold text-[#c9dcce] block">Delivery Address:</span>
+          <div className="pt-2 border-t border-[#5b4728] text-[11px] text-[#9bb5a4]">
+            <span className="font-semibold text-[#ddd4c7] block">Delivery Address:</span>
             <span className="block mt-0.5">{order.deliveryAddress} ({order.deliveryArea})</span>
             <div className="mt-2 pt-1.5 border-t border-[#184227]">
-              <span className="font-semibold text-[#c9dcce] block text-[10px] uppercase">Special Instructions:</span>
+              <span className="font-semibold text-[#ddd4c7] block text-[10px] uppercase">Special Instructions:</span>
               {order.specialInstructions && order.specialInstructions.trim() ? (
-                <span className="block text-[#dfb64c] mt-0.5 bg-[#123620] p-1.5 rounded border border-[#245937]">
+                <span className="block text-[#e0b568] mt-0.5 bg-[#2a2118] p-1.5 rounded border border-[#66502d]">
                   📝 {order.specialInstructions.trim()}
                 </span>
               ) : (
@@ -714,7 +714,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
               )}
             </div>
             {order.customerLatitude && order.customerLongitude && (
-              <div className="mt-2 flex items-center justify-between bg-[#123620] px-2.5 py-1.5 rounded-lg border border-[#245937] text-[10px]">
+              <div className="mt-2 flex items-center justify-between bg-[#2a2118] px-2.5 py-1.5 rounded-lg border border-[#66502d] text-[10px]">
                 <span className="text-emerald-300 flex items-center gap-1 font-semibold">
                   <MapPin className="w-3 h-3 text-emerald-400" />
                   <span>GPS Location Attached</span>
@@ -723,7 +723,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                   href={order.googleMapsUrl || `https://www.google.com/maps?q=${order.customerLatitude},${order.customerLongitude}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[#dfb64c] hover:underline font-semibold flex items-center gap-0.5 ml-2"
+                  className="text-[#e0b568] hover:underline font-semibold flex items-center gap-0.5 ml-2"
                 >
                   <span>Google Maps</span>
                   <ExternalLink className="w-2.5 h-2.5" />
@@ -736,19 +736,19 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
         {/* ========================================================================= */}
         {/* FOOTER ACTIONS                                                            */}
         {/* ========================================================================= */}
-        <div className="mt-4 flex items-center justify-between gap-2.5 pt-3 border-t border-[#1b432a]">
+        <div className="mt-4 flex items-center justify-between gap-2.5 pt-3 border-t border-[#5b4728]">
           <a
             href="tel:9567562071"
-            className="flex-1 bg-[#123620] hover:bg-[#184428] text-[#c9dcce] py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-[#245937] transition-all cursor-pointer"
+            className="flex-1 bg-[#2a2118] hover:bg-[#4f3d25] text-[#ddd4c7] py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-[#66502d] transition-all cursor-pointer"
           >
-            <Phone className="w-3.5 h-3.5 text-[#dfb64c]" />
+            <Phone className="w-3.5 h-3.5 text-[#e0b568]" />
             <span>Call Restaurant</span>
           </a>
 
           <button
             onClick={() => fetchOrder(true)}
             disabled={refreshing}
-            className="bg-[#163d25] hover:bg-[#205534] text-[#dfb64c] py-2.5 px-3.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-[#cba135]/40 transition-all cursor-pointer"
+            className="bg-[#163d25] hover:bg-[#205534] text-[#e0b568] py-2.5 px-3.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-[#b98b43]/40 transition-all cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             <span>{refreshing ? 'Syncing...' : 'Sync'}</span>
