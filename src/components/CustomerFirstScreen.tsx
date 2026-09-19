@@ -45,7 +45,7 @@ export const CustomerFirstScreen: React.FC<CustomerFirstScreenProps> = ({ restau
       <nav className="max-w-7xl mx-auto px-4 sm:px-7 py-3 flex items-center justify-between gap-4 border-b border-[#8d6b35]/20">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-11 h-11 rounded-xl overflow-hidden border border-[#d3a955] bg-[#f4eee2] shrink-0 shadow-lg">
-            {logoPhoto ? <WatermarkedImage src={logoPhoto} alt={restaurantName} className="w-full h-full" watermarkSize="sm" /> : <div className="w-full h-full flex items-center justify-center"><UtensilsCrossed className="w-5 h-5 text-[#80602f]" /></div>}
+            {logoPhoto ? <img src={logoPhoto} alt={`${restaurantName} logo`} className="w-full h-full object-contain p-1.5" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <div className="w-full h-full flex items-center justify-center"><UtensilsCrossed className="w-5 h-5 text-[#80602f]" /></div>}
           </div>
           <div className="min-w-0">
             <div className="font-brand text-lg tracking-[0.08em] truncate">{restaurantName}</div>
