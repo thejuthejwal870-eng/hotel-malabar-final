@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Plus, Edit2, Trash2, ArrowUp, ArrowDown, CheckCircle2, AlertCircle, Utensils, Flame, Fish, Soup, Salad, Drumstick, Carrot, Egg, Disc, Wheat, Sparkles, Sun, Coffee, X } from 'lucide-react';
+import { Layers, Plus, Edit2, Trash2, ArrowUp, ArrowDown, CheckCircle2, Upload, AlertCircle, Utensils, Flame, Fish, Soup, Salad, Drumstick, Carrot, Egg, Disc, Wheat, Sparkles, Sun, Coffee, X } from 'lucide-react';
 import { MenuCategory, MenuItem } from '../types';
 
 const CATEGORY_ICON_OPTIONS = [
@@ -22,6 +22,8 @@ export const AdminCategoryManager: React.FC<AdminCategoryManagerProps> = ({ admi
   const [categoryName, setCategoryName] = useState('');
   const [categoryIcon, setCategoryIcon] = useState('Utensils');
   const [categoryImageUrl, setCategoryImageUrl] = useState('');
+  const [categoryPhotoUploading, setCategoryPhotoUploading] = useState(false);
+  const categoryPhotoInputRef = React.useRef<HTMLInputElement>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -34,6 +36,51 @@ export const AdminCategoryManager: React.FC<AdminCategoryManagerProps> = ({ admi
 
   const handleOpenAddModal = () => { setEditingCategory(null); setCategoryName(''); setCategoryIcon('Utensils'); setCategoryImageUrl(''); setErrorMsg(null); setModalOpen(true); };
   const handleOpenEditModal = (cat: MenuCategory) => { setEditingCategory(cat); setCategoryName(cat.name); setCategoryIcon(cat.icon || 'Utensils'); setCategoryImageUrl(cat.imageUrl || ''); setErrorMsg(null); setModalOpen(true); };
+
+  // Category photos are resized in the browser and stored with the cloud-backed menu data.
+  const handleCategoryPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('Please select an image file.');
+      e.target.value = '';
+      return;
+    }
+    setCategoryPhotoUploading(true);
+    setErrorMsg(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const source = new Image();
+      source.onload = () => {
+        const maxSide = 1200;
+        const scale = Math.min(1, maxSide / Math.max(source.width, source.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(source.width * scale));
+        canvas.height = Math.max(1, Math.round(source.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          setCategoryPhotoUploading(false);
+          setErrorMsg('Could not process the selected photo.');
+          return;
+        }
+        ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        setCategoryImageUrl(dataUrl);
+        setCategoryPhotoUploading(false);
+      };
+      source.onerror = () => {
+        setCategoryPhotoUploading(false);
+        setErrorMsg('Could not read the selected photo.');
+      };
+      source.src = String(reader.result);
+    };
+    reader.onerror = () => {
+      setCategoryPhotoUploading(false);
+      setErrorMsg('Could not read the selected photo.');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault(); if (!categoryName.trim() || !adminToken) return;
@@ -94,7 +141,22 @@ export const AdminCategoryManager: React.FC<AdminCategoryManagerProps> = ({ admi
     </div>
     {modalOpen && <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"><div className="bg-[#0f2d1c] border border-[#235836] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"><div className="flex items-center justify-between border-b border-[#1c472d] pb-3"><h3 className="text-base font-bold text-[#fcfaf6]">{editingCategory ? 'Rename / Edit Category' : 'Create New Menu Category'}</h3><button onClick={() => setModalOpen(false)} className="text-[#8ea896]"><X className="w-5 h-5" /></button></div><form onSubmit={handleSaveCategory} className="space-y-4">
       <div><label className="block text-xs font-semibold text-[#c9dcce] mb-1">Category Name</label><input required value={categoryName} onChange={e => setCategoryName(e.target.value)} placeholder="e.g. Biryani, Seafood, Breakfast" className="w-full bg-[#123620] border border-[#245937] rounded-xl px-3 py-2.5 text-sm text-[#fcfaf6] focus:outline-none focus:border-[#dfb64c]" /></div>
-      <div><label className="block text-xs font-semibold text-[#c9dcce] mb-1">Category Photo URL</label><input type="url" value={categoryImageUrl} onChange={e => setCategoryImageUrl(e.target.value)} placeholder="Paste food/category image URL" className="w-full bg-[#123620] border border-[#245937] rounded-xl px-3 py-2.5 text-sm text-[#fcfaf6] focus:outline-none focus:border-[#dfb64c]" /><p className="text-[10px] text-[#8ea896] mt-1">This photo will appear in the category circle on the customer page.</p>{categoryImageUrl && <div className="mt-2 w-20 h-20 rounded-full overflow-hidden border-2 border-[#dfb64c]"><img src={categoryImageUrl} alt="Category preview" className="w-full h-full object-cover" /></div>}</div>
+      <div>
+        <label className="block text-xs font-semibold text-[#c9dcce] mb-1">Category Photo</label>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => categoryPhotoInputRef.current?.click()} disabled={categoryPhotoUploading} className="px-3 py-2 rounded-xl bg-[#184428] border border-[#dfb64c] text-[#dfb64c] text-xs font-bold flex items-center gap-1.5 disabled:opacity-50">
+            <Upload className="w-4 h-4" />{categoryPhotoUploading ? 'Processing...' : 'Add / Upload Photo'}
+          </button>
+          <input ref={categoryPhotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleCategoryPhotoUpload} />
+          {categoryImageUrl && <button type="button" onClick={() => setCategoryImageUrl('')} className="px-3 py-2 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs font-semibold">Remove Photo</button>}
+        </div>
+        <div className="mt-2">
+          <label className="block text-[10px] text-[#8ea896] mb-1">Or paste an image URL (optional)</label>
+          <input type="url" value={categoryImageUrl.startsWith('data:') ? '' : categoryImageUrl} onChange={e => setCategoryImageUrl(e.target.value)} placeholder="https://..." className="w-full bg-[#123620] border border-[#245937] rounded-xl px-3 py-2.5 text-sm text-[#fcfaf6] focus:outline-none focus:border-[#dfb64c]" />
+        </div>
+        <p className="text-[10px] text-[#8ea896] mt-1">Upload from phone/gallery or paste a URL. The uploaded photo is resized and saved with the category, then appears in the customer category circle.</p>
+        {categoryImageUrl && <div className="mt-3 w-24 h-24 rounded-full overflow-hidden border-2 border-[#dfb64c] bg-[#143d26]"><img src={categoryImageUrl} alt="Category preview" className="w-full h-full object-cover" /></div>}
+      </div>
       <div><label className="block text-xs font-semibold text-[#c9dcce] mb-2">Select Visual Icon (fallback)</label><div className="grid grid-cols-4 gap-2">{CATEGORY_ICON_OPTIONS.map(opt => { const I = opt.icon; const selected = categoryIcon.toLowerCase() === opt.name.toLowerCase(); return <button type="button" key={opt.name} onClick={() => setCategoryIcon(opt.name)} className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 ${selected ? 'bg-[#184428] border-[#dfb64c] text-[#dfb64c]' : 'bg-[#113320] border-[#1b432a] text-[#8ea896]'}`}><I className="w-4 h-4" /><span className="text-[9px] truncate max-w-full">{opt.label}</span></button>; })}</div></div>
       <div className="flex justify-end gap-3 pt-3 border-t border-[#1c472d]"><button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-xs text-[#8ea896]">Cancel</button><button type="submit" disabled={actionLoading} className="bg-gradient-to-r from-[#dfb64c] to-[#cba135] text-[#0a1f13] font-bold px-5 py-2 rounded-xl text-xs disabled:opacity-50">{actionLoading ? 'Saving...' : editingCategory ? 'Save Changes' : 'Create Category'}</button></div>
     </form></div></div>}
