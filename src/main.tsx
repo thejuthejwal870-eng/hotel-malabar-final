@@ -5,6 +5,7 @@ import { RuntimeErrorBoundary } from './components/RuntimeErrorBoundary';
 import './index.css';
 import './admin-reference.css';
 import './admin-layout-fix.css';
+import './admin-premium-theme.css';
 import './customer-cart-black.css';
 
 const rootElement = document.getElementById('root');
