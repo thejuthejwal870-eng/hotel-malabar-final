@@ -36,6 +36,7 @@ export interface MenuCategoryRecord {
   id: string;
   name: string;
   icon: string;
+  imageUrl?: string;
   displayOrder: number;
   isActive: boolean;
 }
