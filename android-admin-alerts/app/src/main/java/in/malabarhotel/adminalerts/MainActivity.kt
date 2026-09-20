@@ -84,6 +84,12 @@ class MainActivity : Activity() {
         webView.visibility = android.view.View.VISIBLE
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
+        // Keep the admin site in a normal responsive tablet/mobile viewport.
+        webView.settings.useWideViewPort = false
+        webView.settings.loadWithOverviewMode = false
+        webView.settings.setSupportZoom(false)
+        webView.settings.textZoom = 100
+        webView.setInitialScale(100)
         webView.settings.mediaPlaybackRequiresUserGesture = false
         CookieManager.getInstance().setAcceptCookie(true)
         webView.webViewClient = object : WebViewClient() {
