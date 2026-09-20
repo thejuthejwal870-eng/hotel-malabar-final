@@ -258,6 +258,23 @@ export function printThermalOrder(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     try {
+      // Native Hotel Malabar Admin App: send KOT/BILL directly to the paired
+      // RPD-588 Bluetooth ESC/POS printer. This bypasses Android's PDF/browser
+      // print dialog completely.
+      if (typeof window !== 'undefined' && (window as any).AndroidPrinter?.printKOT) {
+        try {
+          (window as any).AndroidPrinter.printKOT(
+            JSON.stringify(order),
+            options.type || 'KOT',
+            options.paperWidth || '80mm'
+          );
+          resolve(true);
+          return;
+        } catch (nativeErr) {
+          console.warn('Native thermal printer bridge failed; using browser print fallback.', nativeErr);
+        }
+      }
+
       const html = generateThermalReceiptHtml(order, {
         ...options,
         paperWidth: '80mm',
