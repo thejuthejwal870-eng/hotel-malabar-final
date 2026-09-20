@@ -257,61 +257,91 @@ export function printThermalOrder(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     try {
-      const html = generateThermalReceiptHtml(order, options);
+      const html = generateThermalReceiptHtml(order, {
+        ...options,
+        paperWidth: options.paperWidth || '80mm',
+      });
 
-      // Create isolated invisible iframe
-      let iframe = document.getElementById('thermal-print-frame') as HTMLIFrameElement | null;
-      if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.id = 'thermal-print-frame';
-        iframe.style.position = 'fixed';
-        iframe.style.right = '0';
-        iframe.style.bottom = '0';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
-        iframe.style.border = '0';
-        iframe.style.opacity = '0';
-        iframe.style.zIndex = '-9999';
-        document.body.appendChild(iframe);
-      }
+      // Use a normal print document instead of a zero-size iframe.
+      // Android thermal Print Services (including VeSure) can then detect
+      // the receipt width and crop the job to the actual receipt content.
+      const existing = document.getElementById('thermal-print-root');
+      existing?.remove();
 
-      const doc = iframe.contentWindow?.document || iframe.contentDocument;
-      if (!doc) {
-        throw new Error('Cannot access iframe document');
-      }
+      const root = document.createElement('div');
+      root.id = 'thermal-print-root';
+      root.innerHTML = html;
 
-      doc.open();
-      doc.write(html);
-      doc.close();
+      const style = document.createElement('style');
+      style.id = 'thermal-print-style';
+      style.textContent = `
+        @media screen {
+          #thermal-print-root {
+            display: none !important;
+          }
+        }
+        @media print {
+          @page {
+            size: 80mm auto !important;
+            margin: 0 !important;
+          }
 
-      // Give browser time to lay out CSS before opening print dialog
+          html, body {
+            width: 80mm !important;
+            min-width: 80mm !important;
+            max-width: 80mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+          }
+
+          body > * {
+            display: none !important;
+          }
+
+          #thermal-print-root,
+          #thermal-print-root body,
+          #thermal-print-root html {
+            display: block !important;
+            width: 80mm !important;
+            min-width: 80mm !important;
+            max-width: 80mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          #thermal-print-root .receipt {
+            width: 72mm !important;
+            max-width: 72mm !important;
+            margin: 0 auto !important;
+            padding: 1.5mm 0 !important;
+            box-sizing: border-box !important;
+          }
+        }
+      `;
+
+      document.head.appendChild(style);
+      document.body.appendChild(root);
+
+      // Let the Android print service see the final receipt layout.
       setTimeout(() => {
         try {
-          iframe?.contentWindow?.focus();
-          iframe?.contentWindow?.print();
+          window.focus();
+          window.print();
           resolve(true);
-        } catch (printErr) {
-          console.warn('Iframe print failed, falling back to window.print():', printErr);
-          // Fallback: put in DOM print container and call window.print
-          fallbackDomPrint(order, options);
-          resolve(true);
+        } catch (err) {
+          console.error('Thermal print failed:', err);
+          resolve(false);
+        } finally {
+          setTimeout(() => {
+            root.remove();
+            style.remove();
+          }, 1000);
         }
-      }, 250);
+      }, 200);
     } catch (err) {
-      console.error('Thermal print error, attempting fallback:', err);
-      fallbackDomPrint(order, options);
+      console.error('Thermal print error:', err);
       resolve(false);
     }
   });
-}
-
-function fallbackDomPrint(order: Order, options: ThermalPrintOptions) {
-  let container = document.getElementById('thermal-print-container');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'thermal-print-container';
-    document.body.appendChild(container);
-  }
-  container.innerHTML = generateThermalReceiptHtml(order, options);
-  window.print();
 }
