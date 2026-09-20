@@ -259,117 +259,52 @@ export function printThermalOrder(
     try {
       const html = generateThermalReceiptHtml(order, {
         ...options,
-        paperWidth: options.paperWidth || '80mm',
+        paperWidth: '80mm',
       });
 
-      // Android print services can otherwise fall back to a very tall
-      // browser page (and feed a large amount of blank thermal paper).
-      // Give each receipt a calculated, finite page height instead.
-      const existing = document.getElementById('thermal-print-root');
-      const existingStyle = document.getElementById('thermal-print-style');
-      existing?.remove();
-      existingStyle?.remove();
+      // Print the receipt as a real standalone HTML document. The previous
+      // implementation injected a complete <html> document inside a <div>,
+      // which can make Android PrintService paginate/feed blank paper.
+      let frame = document.getElementById('thermal-print-frame') as HTMLIFrameElement | null;
+      if (!frame) {
+        frame = document.createElement('iframe');
+        frame.id = 'thermal-print-frame';
+        frame.style.position = 'fixed';
+        frame.style.left = '-10000px';
+        frame.style.top = '0';
+        frame.style.width = '80mm';
+        frame.style.height = '1px';
+        frame.style.border = '0';
+        frame.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(frame);
+      }
 
-      const textLines = (value: unknown, charsPerLine = 42) => {
-        const text = String(value ?? '').trim();
-        return text ? Math.max(1, Math.ceil(text.length / charsPerLine)) : 0;
-      };
+      const doc = frame.contentDocument;
+      if (!doc) throw new Error('Cannot access print document');
 
-      const addressLines = textLines(order.deliveryAddress, 42);
-      const specialLines = textLines(order.specialInstructions, 42);
-      const itemLines = order.items.reduce(
-        (sum, item) => sum + Math.max(1, textLines(item.itemName, 30)),
-        0
-      );
+      doc.open();
+      doc.write(html);
+      doc.close();
 
-      // Approximate receipt height in mm. Keep a small safety margin but
-      // never use an infinite/auto page height.
-      const pageHeightMm = Math.min(
-        320,
-        Math.max(
-          75,
-          70 +
-            addressLines * 3.5 +
-            specialLines * 3.5 +
-            itemLines * 7 +
-            order.items.length * 2
-        )
-      );
+      const receipt = doc.querySelector('.receipt') as HTMLElement | null;
+      if (receipt) {
+        receipt.style.width = '72mm';
+        receipt.style.maxWidth = '72mm';
+        receipt.style.margin = '0 auto';
+        receipt.style.padding = '1mm 0 0';
+        receipt.style.boxSizing = 'border-box';
+      }
 
-      const root = document.createElement('div');
-      root.id = 'thermal-print-root';
-      root.innerHTML = html;
-
-      const style = document.createElement('style');
-      style.id = 'thermal-print-style';
-      style.textContent = `
-        @media screen {
-          #thermal-print-root {
-            display: none !important;
-          }
-        }
-
-        @media print {
-          @page {
-            size: 80mm ${pageHeightMm}mm !important;
-            margin: 0 !important;
-          }
-
-          html, body {
-            width: 80mm !important;
-            min-width: 80mm !important;
-            max-width: 80mm !important;
-            height: ${pageHeightMm}mm !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: #fff !important;
-            overflow: hidden !important;
-          }
-
-          body > * {
-            display: none !important;
-          }
-
-          #thermal-print-root {
-            display: block !important;
-            width: 80mm !important;
-            min-width: 80mm !important;
-            max-width: 80mm !important;
-            height: ${pageHeightMm}mm !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-          }
-
-          #thermal-print-root .receipt {
-            width: 72mm !important;
-            max-width: 72mm !important;
-            margin: 0 auto !important;
-            padding: 1.5mm 0 0 !important;
-            box-sizing: border-box !important;
-          }
-        }
-      `;
-
-      document.head.appendChild(style);
-      document.body.appendChild(root);
-
-      // Let the Android print service see the final receipt layout.
       setTimeout(() => {
         try {
-          window.focus();
-          window.print();
+          frame?.contentWindow?.focus();
+          frame?.contentWindow?.print();
           resolve(true);
         } catch (err) {
           console.error('Thermal print failed:', err);
           resolve(false);
-        } finally {
-          setTimeout(() => {
-            root.remove();
-            style.remove();
-          }, 1000);
         }
-      }, 200);
+      }, 300);
     } catch (err) {
       console.error('Thermal print error:', err);
       resolve(false);
