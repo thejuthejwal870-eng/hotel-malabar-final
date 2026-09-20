@@ -453,6 +453,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     }
   }, []);
 
+  // Receive immediate order events from the service worker when the Admin
+  // page is visible. This preserves the uploaded custom sound in the foreground
+  // while background notifications use Android/Chrome notification sound.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'HOTEL_MALABAR_NEW_ORDER') return;
+      if (!soundEnabledRef.current) return;
+      unlockAudio();
+      playNewOrderChime();
+    };
+    navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+  }, []);
+
   // Poll orders & data when logged in
   useEffect(() => {
     if (!isAdminLoggedIn || !adminToken) return;
