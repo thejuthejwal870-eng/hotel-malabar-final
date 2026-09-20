@@ -105,22 +105,22 @@ const AdminOrderCountdown: React.FC<{ readyMs: number }> = React.memo(({ readyMs
   }, []);
 
   const diffSec = Math.floor((readyMs - now) / 1000);
-  if (diffSec > 0) {
-    const m = Math.floor(diffSec / 60);
-    const s = diffSec % 60;
-    return (
-      <div className="font-mono text-emerald-300 font-bold flex items-center gap-1.5 bg-[#123620] px-2 py-1 rounded border border-[#245937]">
-        <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-        <span>Remaining Time: {m}m {s < 10 ? '0' : ''}{s}s ({Math.ceil(diffSec / 60)} mins left)</span>
-      </div>
-    );
-  } else {
+  if (diffSec <= 0) {
     return (
       <div className="font-bold text-amber-300 flex items-center gap-1.5 bg-amber-950/80 px-2 py-1 rounded border border-amber-600/40">
         <span>⚠️ Food should be ready now</span>
       </div>
     );
   }
+
+  const m = Math.floor(diffSec / 60);
+  const s = diffSec % 60;
+  return (
+    <div className="font-mono text-emerald-300 font-bold flex items-center gap-1.5 bg-[#123620] px-2 py-1 rounded border border-[#245937]">
+      <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+      <span>Remaining Time: {m}m {s < 10 ? '0' : ''}{s}s ({Math.ceil(diffSec / 60)} mins left)</span>
+    </div>
+  );
 });
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomerSite }) => {
