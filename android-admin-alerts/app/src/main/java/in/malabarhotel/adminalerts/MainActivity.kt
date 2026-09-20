@@ -1,4 +1,4 @@
-package in.malabarhotel.adminalerts
+package `in`.malabarhotel.adminalerts
 
 import android.Manifest
 import android.app.Activity
