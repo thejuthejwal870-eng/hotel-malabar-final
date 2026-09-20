@@ -33,5 +33,6 @@ jobs:
 
 # Native Android admin app build: background alerts + RPD-588 Bluetooth KOT printing.
 # Latest native responsive WebView layout fix included.
+# Build 1.0.4 after WebView scaling correction.
 # Responsive WebView layout fix included in latest native build.
 # This workflow intentionally runs on pushes to android-admin-alerts so the APK is rebuilt automatically.
