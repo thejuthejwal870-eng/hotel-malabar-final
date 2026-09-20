@@ -59,6 +59,62 @@ async function getVapidConfig() {
   return config;
 }
 
+const pendingAlertLastSent = new Map<string, number>();
+
+async function sendPendingOrderAlerts(): Promise<void> {
+  try {
+    const vapid = await getVapidConfig();
+    await syncFromSupabase();
+    db.reloadFromDisk();
+    const subscriptions = db.getPushSubscriptions();
+    if (!subscriptions.length) return;
+    const pending = db.getAllOrders().filter((order: any) => {
+      const status = String(order.status || '').toLowerCase();
+      return (status === 'new' || status === 'pending' || status === 'pending confirmation' || status === 'placed') &&
+        isOrderTodayServer(order.createdAt);
+    });
+    webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
+    const now = Date.now();
+    for (const order of pending) {
+      const last = pendingAlertLastSent.get(String(order.id)) || 0;
+      if (now - last < 15000) continue;
+      pendingAlertLastSent.set(String(order.id), now);
+      const payload = JSON.stringify({
+        type: 'NEW_ORDER',
+        title: 'HOTEL MALABAR — NEW ORDER',
+        body: 'Order ' + String(order.orderNumber || '') + ' is waiting for acceptance.',
+        orderId: String(order.id || ''),
+        orderNumber: String(order.orderNumber || ''),
+        url: '/admin',
+        alertSequence: now,
+      });
+      await Promise.all(subscriptions.map(async (subscription) => {
+        try {
+          await webpush.sendNotification(subscription as any, payload, { TTL: 30, urgency: 'high' });
+        } catch (err: any) {
+          const code = Number(err?.statusCode || 0);
+          if (code === 404 || code === 410) {
+            db.removePushSubscription(subscription.endpoint);
+          } else {
+            console.warn('Repeated order alert failed:', code || err?.message || err);
+          }
+        }
+      }));
+    }
+    if (pending.length === 0) {
+      for (const id of pendingAlertLastSent.keys()) pendingAlertLastSent.delete(id);
+    }
+  } catch (err) {
+    console.warn('Pending order alert loop failed:', err);
+  }
+}
+
+function isOrderTodayServer(value: string): boolean {
+  const d = new Date(value);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+
 async function sendNewOrderPush(order: any): Promise<void> {
   try {
     const vapid = await getVapidConfig();
@@ -101,7 +157,7 @@ async function sendNewOrderPush(order: any): Promise<void> {
   }
 }
 
-app.use(express.json({ limit: '35mb' }));
+setInterval(() => { void sendPendingOrderAlerts(); }, 15000);\n\napp.use(express.json({ limit: '35mb' }));
 app.use(express.urlencoded({ extended: true, limit: '35mb' }));
 
 // Permissive CORS headers for API requests
