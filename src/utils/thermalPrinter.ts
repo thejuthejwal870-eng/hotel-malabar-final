@@ -45,7 +45,8 @@ export function generateThermalReceiptHtml(order: Order, options: ThermalPrintOp
   <style>
     @page {
       margin: 0;
-      size: ${paperWidth} auto;
+      /* Exact height is injected immediately before print. Avoid auto height because some Android ESC/POS services can treat it as unbounded and keep feeding paper. */
+      size: ${paperWidth} 200mm;
     }
     html, body {
       margin: 0;
@@ -297,14 +298,40 @@ export function printThermalOrder(
 
       setTimeout(() => {
         try {
-          frame?.contentWindow?.focus();
-          frame?.contentWindow?.print();
-          resolve(true);
+          if (!receipt) throw new Error('Receipt element not found');
+
+          // Measure the actual rendered receipt and give the print job a finite
+          // page height. This prevents Android/ESC-POS services from treating
+          // an "auto" roll height as an unbounded document.
+          const heightPx = Math.ceil(receipt.getBoundingClientRect().height);
+          const heightMm = Math.max(45, Math.ceil((heightPx * 25.4) / 96) + 1);
+
+          let pageStyle = doc.getElementById('thermal-page-size');
+          if (!pageStyle) {
+            pageStyle = doc.createElement('style');
+            pageStyle.id = 'thermal-page-size';
+            doc.head.appendChild(pageStyle);
+          }
+          pageStyle.textContent = '@page { margin: 0; size: 80mm ' + heightMm + 'mm; } html, body { width: 80mm; height: ' + heightMm + 'mm; overflow: hidden; margin: 0 !important; padding: 0 !important; }';
+
+          frame!.style.height = heightPx + 'px';
+
+          // Let the print service see the final finite page dimensions.
+          requestAnimationFrame(() => {
+            try {
+              frame?.contentWindow?.focus();
+              frame?.contentWindow?.print();
+              resolve(true);
+            } catch (err) {
+              console.error('Thermal print failed:', err);
+              resolve(false);
+            }
+          });
         } catch (err) {
-          console.error('Thermal print failed:', err);
+          console.error('Thermal print preparation failed:', err);
           resolve(false);
         }
-      }, 300);
+      }, 500);
     } catch (err) {
       console.error('Thermal print error:', err);
       resolve(false);
