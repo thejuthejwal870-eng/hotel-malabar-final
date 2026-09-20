@@ -1,6 +1,9 @@
 package `in`.malabarhotel.adminalerts
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothSocket
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -18,6 +21,7 @@ import android.os.Bundle
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.JavascriptInterface
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -30,6 +34,7 @@ import java.net.URL
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import java.io.OutputStream
 
 class MainActivity : Activity() {
     companion object {
@@ -43,6 +48,8 @@ class MainActivity : Activity() {
     private lateinit var statusText: TextView
     private var tokenInjected = false
     private val secureAlias = "HotelMalabarAdminKey"
+    private val kotPrinterMac = "66:22:7B:91:DF:B2"
+    private val sppUuid = java.util.UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -190,6 +197,7 @@ class MainActivity : Activity() {
         loginPanel.visibility = android.view.View.GONE
         webView.visibility = android.view.View.VISIBLE
         webView.settings.javaScriptEnabled = true
+        webView.addJavascriptInterface(NativePrinterBridge(), "AndroidPrinter")
         webView.settings.domStorageEnabled = true
         // Keep the admin site in a normal responsive tablet/mobile viewport.
         webView.settings.useWideViewPort = false
@@ -213,6 +221,80 @@ class MainActivity : Activity() {
         }
         ContextCompat.startForegroundService(this, Intent(this, OrderAlertService::class.java).putExtra(OrderAlertService.EXTRA_TOKEN, token))
         webView.loadUrl(BASE_URL + "/admin")
+    }
+
+    private inner class NativePrinterBridge {
+        @JavascriptInterface
+        fun isAvailable(): Boolean = try {
+            val adapter = BluetoothAdapter.getDefaultAdapter() ?: return false
+            adapter.isEnabled && if (Build.VERSION.SDK_INT >= 31) ActivityCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED else true
+        } catch (_: Exception) { false }
+
+        @JavascriptInterface
+        fun printKOT(orderJson: String, type: String, paperWidth: String) {
+            Thread {
+                try {
+                    if (Build.VERSION.SDK_INT >= 31 && ActivityCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        runOnUiThread { ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 701) }
+                        throw Exception("Bluetooth permission is required.")
+                    }
+                    val order = JSONObject(orderJson)
+                    val adapter = BluetoothAdapter.getDefaultAdapter() ?: throw Exception("Bluetooth is not available on this device.")
+                    if (!adapter.isEnabled) throw Exception("Please turn on Bluetooth.")
+                    val device = adapter.getRemoteDevice(kotPrinterMac)
+                    val socket = device.createRfcommSocketToServiceRecord(sppUuid)
+                    adapter.cancelDiscovery()
+                    socket.connect()
+                    socket.outputStream.use { out ->
+                        writeEscPos(out, order, type, paperWidth)
+                        out.flush()
+                    }
+                    socket.close()
+                    runOnUiThread { android.widget.Toast.makeText(this@MainActivity, "KOT sent to RPD-588", android.widget.Toast.LENGTH_SHORT).show() }
+                } catch (e: Exception) {
+                    runOnUiThread { android.widget.Toast.makeText(this@MainActivity, "Printer error: ${e.message ?: "Could not print"}", android.widget.Toast.LENGTH_LONG).show() }
+                }
+            }.start()
+        }
+    }
+
+    private fun writeEscPos(out: OutputStream, o: JSONObject, type: String, paperWidth: String) {
+        fun text(s: String) { out.write(s.toByteArray(Charsets.UTF_8)) }
+        fun line() { text("\n") }
+        fun bold(on: Boolean) { out.write(byteArrayOf(0x1B, 0x45, if (on) 1 else 0)) }
+        fun center() { out.write(byteArrayOf(0x1B, 0x61, 1)) }
+        fun left() { out.write(byteArrayOf(0x1B, 0x61, 0)) }
+        fun cut() { out.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00)) }
+
+        out.write(byteArrayOf(0x1B, 0x40))
+        center(); bold(true); text("HOTEL MALABAR"); line(); bold(false)
+        text("AUTHENTIC KERALA CUISINE"); line()
+        text("Sulthan Bathery, Wayanad"); line()
+        text("9567562071 / 8904634717"); line()
+        bold(true); text(if (type == "KOT") "*** KITCHEN ORDER TICKET ***" else "*** CUSTOMER BILL ***"); line(); bold(false)
+        text("--------------------------------"); line()
+        left(); bold(true); text("ORDER: " + o.optString("orderNumber")); line(); bold(false)
+        text("DATE: " + java.text.SimpleDateFormat("dd-MMM-yyyy hh:mm a", java.util.Locale.ENGLISH).format(java.util.Date(o.optString("createdAt").toLongOrNull() ?: System.currentTimeMillis()))); line()
+        text("CUSTOMER: " + o.optString("customerName")); line()
+        text("PHONE: " + o.optString("customerPhone")); line()
+        text("AREA: " + o.optString("deliveryArea")); line()
+        text("ADDRESS: " + o.optString("deliveryAddress")); line()
+        val special = o.optString("specialInstructions").trim()
+        text("SPECIAL: " + if (special.isBlank()) "None" else special); line()
+        text("--------------------------------"); line()
+        val items = o.optJSONArray("items") ?: JSONArray()
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            bold(true); text(item.optInt("quantity", 1).toString() + "x " + item.optString("itemName")); bold(false)
+            text("  Rs." + item.optString("subtotal")); line()
+        }
+        text("--------------------------------"); line()
+        text("FOOD TOTAL: Rs." + o.optString("foodTotal")); line()
+        text("DELIVERY:   Rs." + o.optString("deliveryCharge")); line()
+        bold(true); text("GRAND TOTAL: Rs." + o.optString("grandTotal")); line(); bold(false)
+        text("PAYMENT: CASH ON DELIVERY"); line()
+        center(); line(); bold(true); text(if (type == "KOT") "PREPARE FRESH & DELIVER QUICKLY" else "THANK YOU"); line(); bold(false)
+        line(); line(); line(); cut()
     }
 
     override fun onBackPressed() {
