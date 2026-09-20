@@ -11,22 +11,45 @@ export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'hotel-malabar-secure-secret-key-2026';
 
-function getVapidConfig() {
-  const publicKey = String(process.env.VAPID_PUBLIC_KEY || '').trim();
-  const privateKey = String(process.env.VAPID_PRIVATE_KEY || '').trim();
-  const subject = String(process.env.VAPID_SUBJECT || 'mailto:admin@malabarhotel.in').trim();
-  if (!publicKey || !privateKey) return null;
-  return { publicKey, privateKey, subject };
+async function getVapidConfig() {
+  const envPublicKey = String(process.env.VAPID_PUBLIC_KEY || '').trim();
+  const envPrivateKey = String(process.env.VAPID_PRIVATE_KEY || '').trim();
+  const envSubject = String(process.env.VAPID_SUBJECT || '').trim();
+
+  if (envPublicKey && envPrivateKey) {
+    return {
+      publicKey: envPublicKey,
+      privateKey: envPrivateKey,
+      subject: envSubject || 'mailto:admin@malabarhotel.in',
+    };
+  }
+
+  // Generate once and persist the VAPID pair in the server database so
+  // deployments/restarts keep the same key pair and existing subscriptions
+  // remain valid. The private key never leaves the server.
+  await syncFromSupabase();
+  db.reloadFromDisk();
+
+  const stored = db.getVapidConfig();
+  if (stored?.publicKey && stored?.privateKey) {
+    return stored;
+  }
+
+  const generated = webpush.generateVAPIDKeys();
+  const config = {
+    publicKey: generated.publicKey,
+    privateKey: generated.privateKey,
+    subject: 'mailto:admin@malabarhotel.in',
+  };
+
+  db.setVapidConfig(config);
+  await syncToSupabase();
+  return config;
 }
 
 async function sendNewOrderPush(order: any): Promise<void> {
-  const vapid = getVapidConfig();
-  if (!vapid) {
-    console.warn('Web Push skipped: VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY are not configured.');
-    return;
-  }
-
   try {
+    const vapid = await getVapidConfig();
     await syncFromSupabase();
     db.reloadFromDisk();
     const subscriptions = db.getPushSubscriptions();
@@ -398,11 +421,12 @@ app.get('/api/profile', (req: Request, res: Response) => {
  // ==========================================
 
 app.get('/api/admin/push/public-key', requireAdminAuth, (req: Request, res: Response) => {
-  const vapid = getVapidConfig();
-  if (!vapid) {
-    return res.status(503).json({ error: 'Background alerts are not configured on the server yet.' });
+  try {
+    const vapid = await getVapidConfig();
+    res.json({ publicKey: vapid.publicKey });
+  } catch (err: any) {
+    res.status(503).json({ error: err?.message || 'Background alerts are not configured on the server yet.' });
   }
-  res.json({ publicKey: vapid.publicKey });
 });
 
 app.post('/api/admin/push/subscribe', requireAdminAuth, async (req: Request, res: Response) => {
