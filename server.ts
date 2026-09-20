@@ -420,7 +420,7 @@ app.get('/api/profile', (req: Request, res: Response) => {
  // ADMIN BACKGROUND PUSH ALERTS
  // ==========================================
 
-app.get('/api/admin/push/public-key', requireAdminAuth, (req: Request, res: Response) => {
+app.get('/api/admin/push/public-key', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const vapid = await getVapidConfig();
     res.json({ publicKey: vapid.publicKey });
