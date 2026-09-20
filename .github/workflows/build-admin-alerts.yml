@@ -32,5 +32,6 @@ jobs:
           path: android-admin-alerts/app/build/outputs/apk/debug/app-debug.apk
 
 # Native Android admin app build: background alerts + RPD-588 Bluetooth KOT printing.
+# Latest native responsive WebView layout fix included.
 # Responsive WebView layout fix included in latest native build.
 # This workflow intentionally runs on pushes to android-admin-alerts so the APK is rebuilt automatically.
