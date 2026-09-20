@@ -5,10 +5,66 @@ import jwt from 'jsonwebtoken';
 import { db } from './server/db.ts';
 import { syncFromSupabase, syncToSupabase } from './server/supabase-sync.ts';
 import { extractMenuItemsFromPhotos } from './server/gemini.ts';
+import webpush from 'web-push';
 
 export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'hotel-malabar-secure-secret-key-2026';
+
+function getVapidConfig() {
+  const publicKey = String(process.env.VAPID_PUBLIC_KEY || '').trim();
+  const privateKey = String(process.env.VAPID_PRIVATE_KEY || '').trim();
+  const subject = String(process.env.VAPID_SUBJECT || 'mailto:admin@malabarhotel.in').trim();
+  if (!publicKey || !privateKey) return null;
+  return { publicKey, privateKey, subject };
+}
+
+async function sendNewOrderPush(order: any): Promise<void> {
+  const vapid = getVapidConfig();
+  if (!vapid) {
+    console.warn('Web Push skipped: VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY are not configured.');
+    return;
+  }
+
+  try {
+    await syncFromSupabase();
+    db.reloadFromDisk();
+    const subscriptions = db.getPushSubscriptions();
+    if (!subscriptions.length) return;
+
+    const payload = JSON.stringify({
+      type: 'NEW_ORDER',
+      title: 'HOTEL MALABAR — New Order',
+      body: 'Order ' + String(order.orderNumber || '') + ' received. Open Admin Panel.',
+      orderId: String(order.id || ''),
+      orderNumber: String(order.orderNumber || ''),
+      url: '/admin',
+    });
+
+    webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
+
+    await Promise.all(
+      subscriptions.map(async (subscription) => {
+        try {
+          await webpush.sendNotification(subscription as any, payload, {
+            TTL: 120,
+            urgency: 'high',
+          });
+        } catch (err: any) {
+          const statusCode = Number(err?.statusCode || 0);
+          if (statusCode === 404 || statusCode === 410) {
+            db.removePushSubscription(subscription.endpoint);
+            await syncToSupabase();
+          } else {
+            console.warn('Web Push delivery failed:', statusCode || err?.message || err);
+          }
+        }
+      })
+    );
+  } catch (err) {
+    console.warn('Web Push order alert failed:', err);
+  }
+}
 
 app.use(express.json({ limit: '35mb' }));
 app.use(express.urlencoded({ extended: true, limit: '35mb' }));
@@ -338,10 +394,67 @@ app.get('/api/profile', (req: Request, res: Response) => {
 });
 
 // ==========================================
+ // ADMIN BACKGROUND PUSH ALERTS
+ // ==========================================
+
+app.get('/api/admin/push/public-key', requireAdminAuth, (req: Request, res: Response) => {
+  const vapid = getVapidConfig();
+  if (!vapid) {
+    return res.status(503).json({ error: 'Background alerts are not configured on the server yet.' });
+  }
+  res.json({ publicKey: vapid.publicKey });
+});
+
+app.post('/api/admin/push/subscribe', requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const subscription = req.body?.subscription;
+    if (
+      !subscription ||
+      typeof subscription.endpoint !== 'string' ||
+      !subscription.keys ||
+      typeof subscription.keys.p256dh !== 'string' ||
+      typeof subscription.keys.auth !== 'string'
+    ) {
+      return res.status(400).json({ error: 'Invalid push subscription.' });
+    }
+
+    db.upsertPushSubscription({
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth,
+      },
+      updatedAt: new Date().toISOString(),
+    });
+
+    const saved = await syncToSupabase();
+    if (!saved) {
+      return res.status(503).json({ error: 'Push subscription could not be saved to the cloud.' });
+    }
+
+    res.json({ success: true, message: 'Background order alerts enabled.' });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to save push subscription.' });
+  }
+});
+
+app.delete('/api/admin/push/subscribe', requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const endpoint = String(req.body?.endpoint || '').trim();
+    if (!endpoint) return res.status(400).json({ error: 'Push endpoint is required.' });
+    db.removePushSubscription(endpoint);
+    await syncToSupabase();
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to remove push subscription.' });
+  }
+});
+
+// ==========================================
 // CUSTOMER ORDERS
 // ==========================================
 
-app.post('/api/orders', requireCustomerAuth, (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const {
       deliveryAddress,
@@ -407,6 +520,10 @@ app.post('/api/orders', requireCustomerAuth, (req: AuthenticatedRequest, res: Re
     if (!cloudSaved) {
       return res.status(503).json({ error: 'Order could not be saved to the cloud. Please try again.' });
     }
+
+    // Trigger a real server-side Web Push notification. This works even when
+    // the Admin browser tab is backgrounded or no longer loaded.
+    void sendNewOrderPush(order);
 
     res.status(201).json({
       message: `Order ${order.orderNumber} placed successfully! Preparing for cash on delivery.`,
