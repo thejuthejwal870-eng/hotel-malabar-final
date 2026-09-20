@@ -201,11 +201,11 @@ class MainActivity : Activity() {
         webView.addJavascriptInterface(NativePrinterBridge(), "AndroidPrinter")
         webView.settings.domStorageEnabled = true
         // Keep the admin site in a normal responsive tablet/mobile viewport.
-        webView.settings.useWideViewPort = false
+        webView.settings.useWideViewPort = true
         webView.settings.loadWithOverviewMode = false
         webView.settings.setSupportZoom(false)
         webView.settings.textZoom = 100
-        webView.setInitialScale(100)
+        webView.setInitialScale(0)
         webView.settings.mediaPlaybackRequiresUserGesture = false
         CookieManager.getInstance().setAcceptCookie(true)
         webView.webViewClient = object : WebViewClient() {
@@ -213,7 +213,7 @@ class MainActivity : Activity() {
                 if (url.startsWith(BASE_URL)) {
                     view.evaluateJavascript("""
                         (function(){
-                          document.body.classList.add('native-admin-mobile');
+                          document.documentElement.classList.add('native-admin-mobile'); document.body.classList.add('native-admin-mobile');
                           var m=document.querySelector('meta[name="viewport"]');
                           if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}
                           m.setAttribute('content','width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
@@ -228,7 +228,7 @@ class MainActivity : Activity() {
                               .native-admin-mobile .admin-page-shell header>div:nth-child(2){display:none!important}
                               .native-admin-mobile .admin-page-shell header button[aria-label="Toggle Admin Menu Sidebar"]{display:flex!important}
                               .native-admin-mobile .admin-page-shell aside{display:flex!important;position:fixed!important;top:78px!important;left:0!important;width:min(88vw,360px)!important;height:calc(100vh - 78px)!important;z-index:120!important;transform:translateX(-110%)!important}
-                              .native-admin-mobile .admin-page-shell aside.translate-x-0{transform:translateX(0)!important}
+                              .native-admin-mobile .admin-page-shell aside.translate-x-0,.native-admin-mobile .admin-page-shell aside.lg\\:translate-x-0{transform:translateX(0)!important}
                               .native-admin-mobile .admin-page-shell main{display:block!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;padding:16px 12px 28px!important;overflow-x:hidden!important}
                               .native-admin-mobile .admin-page-shell main .grid[class*="lg:grid-cols-2"]{grid-template-columns:minmax(0,1fr)!important}
                               .native-admin-mobile .admin-page-shell main input,.native-admin-mobile .admin-page-shell main select,.native-admin-mobile .admin-page-shell main textarea{min-height:42px!important;font-size:14px!important}
