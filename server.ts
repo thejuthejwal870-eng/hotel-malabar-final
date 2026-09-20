@@ -962,6 +962,11 @@ app.put('/api/admin/orders/:orderId/status', requireAdminAuth, (req: Request, re
       rejectionReason
     );
 
+    // Persist status changes to the cloud immediately so native background
+    // alert clients see ACCEPTED/REJECTED without waiting for a later sync.
+    void syncToSupabase().catch(() => {});
+    broadcastAdminOrderEvent(updated);
+
     res.json({ order: updated, message: `Order status updated to ${status}.` });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
