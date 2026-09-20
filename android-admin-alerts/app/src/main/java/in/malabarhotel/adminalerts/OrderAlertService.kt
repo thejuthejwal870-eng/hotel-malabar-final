@@ -64,12 +64,23 @@ class OrderAlertService : Service() {
                         val status = order.optString("status").trim().lowercase()
                         if (id.isNotBlank() && isPending(status)) currentPending.add(id)
                     }
+                    val previousPending = pendingIds
                     pendingIds = currentPending
-                    if (pendingIds.isEmpty()) {
+
+                    // Existing orders are only the initial baseline. Never alert for an
+                    // already-pending order when the service/app starts.
+                    if (!initialized) {
+                        initialized = true
                         stopAlertSound()
-                    } else if (mediaPlayer == null) {
-                        vibrate()
-                        refreshAndPlayCustomSound()
+                    } else if (pendingIds.isEmpty()) {
+                        // All pending orders have been accepted/rejected.
+                        stopAlertSound()
+                    } else {
+                        val newlyArrived = pendingIds - previousPending
+                        if (newlyArrived.isNotEmpty() && mediaPlayer == null) {
+                            vibrate()
+                            refreshAndPlayCustomSound()
+                        }
                     }
                     updateServiceNotification(if (pendingIds.isEmpty()) "Waiting for new orders" else pendingIds.size.toString() + " order(s) waiting for acceptance")
                 } else if (response.code == 401 || response.code == 403) {
