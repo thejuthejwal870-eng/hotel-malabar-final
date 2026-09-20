@@ -109,8 +109,8 @@ class MainActivity : Activity() {
         webView.settings.useWideViewPort = false
         webView.settings.loadWithOverviewMode = false
         webView.settings.setSupportZoom(false)
-        webView.settings.textZoom = 100
-        webView.setInitialScale(100)
+        webView.settings.textZoom = 115
+        webView.setInitialScale(145)
         webView.settings.mediaPlaybackRequiresUserGesture = false
         CookieManager.getInstance().setAcceptCookie(true)
         webView.webViewClient = object : WebViewClient() {
