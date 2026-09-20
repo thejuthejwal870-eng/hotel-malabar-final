@@ -200,7 +200,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   } | null>(null);
 
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
-  const [printPaperWidth, setPrintPaperWidth] = useState<'58mm' | '80mm'>('58mm');
+  const [printPaperWidth, setPrintPaperWidth] = useState<'58mm' | '80mm'>('80mm');
   const [printType, setPrintType] = useState<'KOT' | 'BILL'>('KOT');
   const [selectedOrderForKOT, setSelectedOrderForKOT] = useState<Order | null>(null);
 
