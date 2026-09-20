@@ -32,3 +32,4 @@ jobs:
           path: android-admin-alerts/app/build/outputs/apk/debug/app-debug.apk
 
 # Build trigger verified for the native admin alert APK.
+# Native build includes RPD-588 Bluetooth KOT printing.
