@@ -19,6 +19,7 @@ self.addEventListener('push', (event) => {
     tag: data.orderId ? 'hotel-malabar-order-' + data.orderId : 'hotel-malabar-new-order',
     renotify: true,
     requireInteraction: true,
+    silent: false,
     vibrate: [250, 120, 250, 120, 400],
     data: {
       url: data.url || '/admin',
