@@ -115,10 +115,13 @@ class MainActivity : Activity() {
         CookieManager.getInstance().setAcceptCookie(true)
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
-                if (!tokenInjected && url.startsWith(BASE_URL)) {
-                    tokenInjected = true
-                    val escaped = JSONObject.quote(token)
-                    view.evaluateJavascript("(function(){localStorage.setItem('hm_admin_token'," + escaped + "); document.body.classList.add('native-admin-mobile'); location.reload();})()", null)
+                if (url.startsWith(BASE_URL)) {
+                    view.evaluateJavascript("document.body.classList.add('native-admin-mobile');", null)
+                    if (!tokenInjected) {
+                        tokenInjected = true
+                        val escaped = JSONObject.quote(token)
+                        view.evaluateJavascript("(function(){localStorage.setItem('hm_admin_token'," + escaped + "); location.reload();})()", null)
+                    }
                 }
             }
         }
