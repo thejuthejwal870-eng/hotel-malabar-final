@@ -10,7 +10,7 @@ export interface ThermalPrintOptions {
 
 export function generateThermalReceiptHtml(order: Order, options: ThermalPrintOptions = {}): string {
   const type = options.type || 'KOT';
-  const paperWidth = options.paperWidth || '58mm';
+  const paperWidth = options.paperWidth || '80mm';
   const restaurantName = options.restaurantName || 'HOTEL MALABAR';
   const phones = options.phones || ['9567562071', '8904634717'];
   const address = options.address || 'Authentic Kerala Cuisine, Main Road, Sulthan Bathery, Wayanad';
@@ -248,7 +248,7 @@ export function generateThermalReceiptHtml(order: Order, options: ThermalPrintOp
 }
 
 /**
- * Triggers thermal printing by writing to an isolated iframe.
+ * Triggers thermal printing using the Android/VeSure print service when available.
  * Falls back to window.print() if iframe printing is blocked.
  */
 export function printThermalOrder(
