@@ -201,6 +201,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
 
   const [showBackgroundAlertPopup, setShowBackgroundAlertPopup] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
+  const [backgroundPushStatus, setBackgroundPushStatus] = useState<'idle' | 'enabling' | 'enabled' | 'error'>('idle');
 
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
   const [printPaperWidth, setPrintPaperWidth] = useState<'58mm' | '80mm'>('80mm');
@@ -284,26 +285,107 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   const isInitialOrderLoadRef = useRef<boolean>(true);
   const printedOrdersRef = useRef<Set<string>>(new Set());
 
-  // Ask once when the admin dashboard opens for browser notifications and audio unlock.
+  const urlBase64ToUint8Array = (base64String: string) => {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    return Uint8Array.from(Array.from(rawData).map((char) => char.charCodeAt(0)));
+  };
+
+  const setupBackgroundPushSubscription = async (token: string) => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setBackgroundPushStatus('error');
+      return false;
+    }
+
+    try {
+      setBackgroundPushStatus('enabling');
+      const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      await navigator.serviceWorker.ready;
+
+      const keyResponse = await fetch('/api/admin/push/public-key', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const keyData = await keyResponse.json().catch(() => ({}));
+      if (!keyResponse.ok || !keyData.publicKey) {
+        throw new Error(keyData.error || 'Background push is not configured on the server.');
+      }
+
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
+        });
+      }
+
+      const saveResponse = await fetch('/api/admin/push/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
+      });
+      const saveData = await saveResponse.json().catch(() => ({}));
+      if (!saveResponse.ok) {
+        throw new Error(saveData.error || 'Could not save the background alert subscription.');
+      }
+
+      setBackgroundPushStatus('enabled');
+      return true;
+    } catch (err) {
+      console.warn('Background push setup notice:', err);
+      setBackgroundPushStatus('error');
+      return false;
+    }
+  };
+
+  // Ask once when the admin dashboard opens for real background push notifications and audio unlock.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if ('Notification' in window) {
-      setNotificationPermission(Notification.permission);
-      if (Notification.permission !== 'granted' && localStorage.getItem('hm_admin_background_alert_prompted') !== 'true') setShowBackgroundAlertPopup(true);
+      const permission = Notification.permission;
+      setNotificationPermission(permission);
+      if (permission === 'granted' && adminToken) {
+        void setupBackgroundPushSubscription(adminToken);
+      } else if (
+        permission !== 'granted' &&
+        localStorage.getItem('hm_admin_background_alert_prompted') !== 'true'
+      ) {
+        setShowBackgroundAlertPopup(true);
+      }
     }
-  }, []);
+  }, [adminToken]);
 
   const handleEnableBackgroundAlerts = async () => {
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem('hm_admin_background_alert_prompted', 'true');
-      if ('Notification' in window) setNotificationPermission(await Notification.requestPermission());
+      setBackgroundPushStatus('enabling');
+
+      let permission: NotificationPermission = 'granted';
+      if ('Notification' in window) {
+        permission = await Notification.requestPermission();
+        setNotificationPermission(permission);
+      }
+
+      if (permission !== 'granted') {
+        setBackgroundPushStatus('error');
+        return;
+      }
+
       unlockAudio();
       playTestChime();
-      setShowBackgroundAlertPopup(false);
+
+      if (!adminToken) throw new Error('Admin session is not ready. Please try again.');
+      const enabled = await setupBackgroundPushSubscription(adminToken);
+      if (enabled) {
+        setShowBackgroundAlertPopup(false);
+      }
     } catch (err) {
-      console.warn('Background alert permission notice:', err);
-      setShowBackgroundAlertPopup(false);
+      console.warn('Background push permission notice:', err);
+      setBackgroundPushStatus('error');
     }
   };
 
@@ -831,12 +913,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
 
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
         try {
-          const notification = new Notification('HOTEL MALABAR - New Order', {
-            body: 'Order ' + latestNewOrder.orderNumber + ' received. Please open the Admin panel.',
-            tag: 'hotel-malabar-order-' + latestNewOrder.id,
-            requireInteraction: true,
-          });
-          notification.onclick = () => { window.focus(); notification.close(); };
+          const showPushNotification = async () => {
+            const registration = await navigator.serviceWorker.ready;
+            await registration.showNotification('HOTEL MALABAR - New Order', {
+              body: 'Order ' + latestNewOrder.orderNumber + ' received. Please open the Admin panel.',
+              tag: 'hotel-malabar-order-' + latestNewOrder.id,
+              renotify: true,
+              requireInteraction: true,
+              vibrate: [250, 120, 250, 120, 400],
+              data: { url: '/admin', orderId: latestNewOrder.id },
+            });
+          };
+          if ('serviceWorker' in navigator) {
+            void showPushNotification();
+          }
         } catch (err) {
           console.warn('System notification notice:', err);
         }
