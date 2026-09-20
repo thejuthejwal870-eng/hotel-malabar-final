@@ -262,11 +262,39 @@ export function printThermalOrder(
         paperWidth: options.paperWidth || '80mm',
       });
 
-      // Use a normal print document instead of a zero-size iframe.
-      // Android thermal Print Services (including VeSure) can then detect
-      // the receipt width and crop the job to the actual receipt content.
+      // Android print services can otherwise fall back to a very tall
+      // browser page (and feed a large amount of blank thermal paper).
+      // Give each receipt a calculated, finite page height instead.
       const existing = document.getElementById('thermal-print-root');
+      const existingStyle = document.getElementById('thermal-print-style');
       existing?.remove();
+      existingStyle?.remove();
+
+      const textLines = (value: unknown, charsPerLine = 42) => {
+        const text = String(value ?? '').trim();
+        return text ? Math.max(1, Math.ceil(text.length / charsPerLine)) : 0;
+      };
+
+      const addressLines = textLines(order.deliveryAddress, 42);
+      const specialLines = textLines(order.specialInstructions, 42);
+      const itemLines = order.items.reduce(
+        (sum, item) => sum + Math.max(1, textLines(item.itemName, 30)),
+        0
+      );
+
+      // Approximate receipt height in mm. Keep a small safety margin but
+      // never use an infinite/auto page height.
+      const pageHeightMm = Math.min(
+        320,
+        Math.max(
+          75,
+          70 +
+            addressLines * 3.5 +
+            specialLines * 3.5 +
+            itemLines * 7 +
+            order.items.length * 2
+        )
+      );
 
       const root = document.createElement('div');
       root.id = 'thermal-print-root';
@@ -280,9 +308,10 @@ export function printThermalOrder(
             display: none !important;
           }
         }
+
         @media print {
           @page {
-            size: 80mm auto !important;
+            size: 80mm ${pageHeightMm}mm !important;
             margin: 0 !important;
           }
 
@@ -290,31 +319,33 @@ export function printThermalOrder(
             width: 80mm !important;
             min-width: 80mm !important;
             max-width: 80mm !important;
+            height: ${pageHeightMm}mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #fff !important;
+            overflow: hidden !important;
           }
 
           body > * {
             display: none !important;
           }
 
-          #thermal-print-root,
-          #thermal-print-root body,
-          #thermal-print-root html {
+          #thermal-print-root {
             display: block !important;
             width: 80mm !important;
             min-width: 80mm !important;
             max-width: 80mm !important;
+            height: ${pageHeightMm}mm !important;
             margin: 0 !important;
             padding: 0 !important;
+            overflow: hidden !important;
           }
 
           #thermal-print-root .receipt {
             width: 72mm !important;
             max-width: 72mm !important;
             margin: 0 auto !important;
-            padding: 1.5mm 0 !important;
+            padding: 1.5mm 0 0 !important;
             box-sizing: border-box !important;
           }
         }
