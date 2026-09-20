@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import android.os.Build
 import android.os.Bundle
 import android.webkit.CookieManager
@@ -27,6 +29,7 @@ class MainActivity : Activity() {
         const val BASE_URL = "https://malabarhotel.in"
         const val PREFS = "hotel_malabar_admin"
         const val TOKEN = "admin_token"
+        const val BATTERY_SETUP = "battery_setup_done"
     }
     private lateinit var loginPanel: LinearLayout
     private lateinit var webView: WebView
@@ -48,7 +51,7 @@ class MainActivity : Activity() {
             login(findViewById<EditText>(R.id.phoneInput).text.toString().trim(), findViewById<EditText>(R.id.passwordInput).text.toString())
         }
         val savedToken = getSharedPreferences(PREFS, MODE_PRIVATE).getString(TOKEN, null)
-        if (!savedToken.isNullOrBlank()) openAdmin(savedToken)
+        if (!savedToken.isNullOrBlank()) { requestAlertPermissionsIfNeeded(); openAdmin(savedToken) }
     }
 
     private fun login(phone: String, password: String) {
@@ -72,13 +75,31 @@ class MainActivity : Activity() {
                 if (conn.responseCode !in 200..299) throw Exception(json.optString("error", "Admin login failed."))
                 val token = json.getString("token")
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(TOKEN, token).apply()
-                runOnUiThread { openAdmin(token) }
+                runOnUiThread { requestAlertPermissionsIfNeeded(); openAdmin(token) }
             } catch (e: Exception) {
                 runOnUiThread { statusText.text = e.message ?: "Login failed." }
             }
         }.start()
     }
 
+    private fun requestAlertPermissionsIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 501)
+        }
+        if (Build.VERSION.SDK_INT >= 23) {
+            val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                try {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (_: Exception) {
+                    try { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (_: Exception) {}
+                }
+            }
+        }
+    }
     private fun openAdmin(token: String) {
         loginPanel.visibility = android.view.View.GONE
         webView.visibility = android.view.View.VISIBLE
