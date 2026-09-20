@@ -633,7 +633,7 @@ app.get('/api/admin/orders', requireAdminAuth, async (req: Request, res: Respons
     db.reloadFromDisk();
     const date = req.query.date ? String(req.query.date) : undefined;
     const status = req.query.status ? String(req.query.status) : undefined;
-    res.json(db.getAdminOrders({ date, status }));
+    res.json(db.getAllOrders());
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
