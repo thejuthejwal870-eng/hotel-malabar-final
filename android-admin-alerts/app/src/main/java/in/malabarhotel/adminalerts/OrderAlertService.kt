@@ -58,20 +58,19 @@ class OrderAlertService : Service() {
                 if (response.code == 200) {
                     val json = JSONArray(response.body)
                     val currentPending = mutableSetOf<String>()
-                    var newOrder = false
                     for (i in 0 until json.length()) {
                         val order = json.getJSONObject(i)
                         val id = order.optString("id")
                         val status = order.optString("status").trim().lowercase()
-                        if (isPending(status)) {
-                            currentPending.add(id)
-                            if (initialized && !pendingIds.contains(id)) newOrder = true
-                        }
+                        if (id.isNotBlank() && isPending(status)) currentPending.add(id)
                     }
-                    if (!initialized) initialized = true
-                    else if (newOrder) { vibrate(); refreshAndPlayCustomSound() }
                     pendingIds = currentPending
-                    if (pendingIds.isEmpty()) stopAlertSound()
+                    if (pendingIds.isEmpty()) {
+                        stopAlertSound()
+                    } else if (mediaPlayer == null) {
+                        vibrate()
+                        refreshAndPlayCustomSound()
+                    }
                     updateServiceNotification(if (pendingIds.isEmpty()) "Waiting for new orders" else pendingIds.size.toString() + " order(s) waiting for acceptance")
                 } else if (response.code == 401 || response.code == 403) {
                     stopAlertSound()
