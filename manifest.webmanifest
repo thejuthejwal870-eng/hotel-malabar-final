@@ -1,0 +1,19 @@
+{
+  "name": "Hotel Malabar Admin",
+  "short_name": "Malabar Admin",
+  "description": "Hotel Malabar restaurant admin dashboard and order alerts.",
+  "start_url": "/admin",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#151210",
+  "theme_color": "#151210",
+  "icons": [
+    {
+      "src": "/hotel-malabar-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
