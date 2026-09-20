@@ -10,6 +10,18 @@ import webpush from 'web-push';
 export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'hotel-malabar-secure-secret-key-2026';
+const adminOrderStreamClients = new Set<Response>();
+
+function broadcastAdminOrderEvent(order: any) {
+  const payload = `event: new-order\\ndata: ${JSON.stringify(order)}\\n\\n`;
+  for (const client of adminOrderStreamClients) {
+    try {
+      client.write(payload);
+    } catch {
+      adminOrderStreamClients.delete(client);
+    }
+  }
+}
 
 async function getVapidConfig() {
   const envPublicKey = String(process.env.VAPID_PUBLIC_KEY || '').trim();
@@ -547,6 +559,9 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
 
     // Trigger a real server-side Web Push notification. This works even when
     // the Admin browser tab is backgrounded or no longer loaded.
+    // Notify every currently connected Admin dashboard immediately. Polling and
+    // Web Push remain as fallbacks for background/throttled browser sessions.
+    broadcastAdminOrderEvent(order);
     void sendNewOrderPush(order);
 
     res.status(201).json({
@@ -769,14 +784,48 @@ app.get('/api/admin/config-status', (req: Request, res: Response) => {
 
 app.get('/api/admin/orders', requireAdminAuth, async (req: Request, res: Response) => {
   try {
-    // Always read the latest cloud snapshot before showing the admin order queue.
-    await syncFromSupabase();
-    db.reloadFromDisk();
-    const date = req.query.date ? String(req.query.date) : undefined;
-    const status = req.query.status ? String(req.query.status) : undefined;
+    // Sync from cloud only for an explicit initial refresh. Normal polling must
+    // read the live local database immediately so a new order is never delayed
+    // behind a Supabase round-trip or overwritten by an older cloud snapshot.
+    if (String(req.query.sync || '') === '1') {
+      await syncFromSupabase();
+      db.reloadFromDisk();
+    }
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
     res.json(db.getAllOrders());
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/orders/stream', (req: Request, res: Response) => {
+  try {
+    const token = String(req.query.token || '');
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    if (!decoded || decoded.role !== 'admin' || !db.isAdminPhone(decoded.phone)) {
+      return res.status(403).end();
+    }
+
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+    res.write(': connected\\n\\n');
+    adminOrderStreamClients.add(res);
+
+    const heartbeat = setInterval(() => {
+      try { res.write(': heartbeat\\n\\n'); } catch { /* client disconnected */ }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      adminOrderStreamClients.delete(res);
+    });
+  } catch {
+    res.status(401).end();
   }
 });
 
