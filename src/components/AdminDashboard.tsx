@@ -458,23 +458,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     if (!isAdminLoggedIn || !adminToken) return;
 
     fetchAllAdminData();
-    // Keep polling even when the admin page is in the background.
-    // The previous document.hidden guard stopped order checks completely
-    // when the tablet was switched to another app/screen, so new orders
-    // could be missed and the notification sound could never fire.
+
+    // Real-time order stream: when the server accepts a new customer order,
+    // the Admin dashboard is notified immediately instead of waiting for a
+    // timer or a cloud database round-trip.
+    let stream: EventSource | null = null;
+    try {
+      const streamToken = encodeURIComponent(adminToken);
+      stream = new EventSource('/api/admin/orders/stream?token=' + streamToken);
+      stream.addEventListener('new-order', () => {
+        void fetchOrdersOnly();
+      });
+      stream.onerror = () => {
+        // EventSource automatically reconnects. The polling fallback below
+        // keeps the queue current if the browser temporarily suspends SSE.
+      };
+    } catch (err) {
+      console.warn('Admin realtime order stream unavailable:', err);
+    }
+
+    // Keep a lightweight fallback poll. It reads the live local database only,
+    // so it is fast and cannot be delayed by Supabase synchronization.
     const interval = setInterval(() => {
-      fetchOrdersOnly();
-    }, 4000);
+      void fetchOrdersOnly();
+    }, 3000);
 
     const handleVisibility = () => {
-      if (!document.hidden) {
-        fetchOrdersOnly();
-      }
+      if (!document.hidden) void fetchOrdersOnly();
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       clearInterval(interval);
+      stream?.close();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [isAdminLoggedIn, adminToken]);
@@ -507,7 +523,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
       const headers = { Authorization: `Bearer ${adminToken}` };
 
       const [ordersRes, menuRes, settingsRes, customersRes, profileRes, ratingsRes, expensesRes] = await Promise.all([
-        fetch('/api/admin/orders', { headers }),
+        fetch('/api/admin/orders?sync=1', { headers, cache: 'no-store' }),
         fetch('/api/menu'),
         fetch('/api/settings?includeAudio=true'),
         fetch('/api/admin/customers', { headers }),
@@ -693,6 +709,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     try {
       const res = await fetch('/api/admin/orders', {
         headers: { Authorization: `Bearer ${adminToken}` },
+        cache: 'no-store',
       });
       if (res.ok) {
         const data = await res.json();
