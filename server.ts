@@ -70,7 +70,7 @@ async function sendPendingOrderAlerts(): Promise<void> {
     if (!subscriptions.length) return;
     const pending = db.getAllOrders().filter((order: any) => {
       const status = String(order.status || '').toLowerCase();
-      return (status === 'new' || status === 'pending' || status === 'pending confirmation' || status === 'placed') &&
+      return (status === 'new' || status === 'pending' || status === 'pending confirmation' || status === 'order placed' || status === 'placed') &&
         isOrderTodayServer(order.createdAt);
     });
     webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
