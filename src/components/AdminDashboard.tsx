@@ -109,8 +109,7 @@ const AdminOrderCountdown: React.FC<{ readyMs: number }> = React.memo(({ readyMs
     const m = Math.floor(diffSec / 60);
     const s = diffSec % 60;
     return (
-    <>
-  return (      <div className="font-mono text-emerald-300 font-bold flex items-center gap-1.5 bg-[#123620] px-2 py-1 rounded border border-[#245937]">
+      <div className="font-mono text-emerald-300 font-bold flex items-center gap-1.5 bg-[#123620] px-2 py-1 rounded border border-[#245937]">
         <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
         <span>Remaining Time: {m}m {s < 10 ? '0' : ''}{s}s ({Math.ceil(diffSec / 60)} mins left)</span>
       </div>
@@ -200,7 +199,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     time: string;
   } | null>(null);
 
-  // Browser notification permission for new-order alerts.
   const [showBackgroundAlertPopup, setShowBackgroundAlertPopup] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
 
@@ -286,16 +284,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   const isInitialOrderLoadRef = useRef<boolean>(true);
   const printedOrdersRef = useRef<Set<string>>(new Set());
 
-  // Ask once when the admin dashboard opens. This requests the
-  // browser's real notification permission and also unlocks audio
-  // after the user's tap.
+  // Ask once when the admin dashboard opens for browser notifications and audio unlock.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if ('Notification' in window) {
       setNotificationPermission(Notification.permission);
-      if (Notification.permission !== 'granted' && localStorage.getItem('hm_admin_background_alert_prompted') !== 'true') {
-        setShowBackgroundAlertPopup(true);
-      }
+      if (Notification.permission !== 'granted' && localStorage.getItem('hm_admin_background_alert_prompted') !== 'true') setShowBackgroundAlertPopup(true);
     }
   }, []);
 
@@ -303,10 +297,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem('hm_admin_background_alert_prompted', 'true');
-      if ('Notification' in window) {
-        const permission = await Notification.requestPermission();
-        setNotificationPermission(permission);
-      }
+      if ('Notification' in window) setNotificationPermission(await Notification.requestPermission());
       unlockAudio();
       playTestChime();
       setShowBackgroundAlertPopup(false);
@@ -317,9 +308,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   };
 
   const handleDismissBackgroundAlertPopup = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('hm_admin_background_alert_prompted', 'true');
-    }
+    if (typeof window !== 'undefined') localStorage.setItem('hm_admin_background_alert_prompted', 'true');
     setShowBackgroundAlertPopup(false);
   };
 
@@ -402,37 +391,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
-    return (
-      {showBackgroundAlertPopup && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-amber-400/50 bg-[#211c16] p-6 text-[#f7f1e6] shadow-2xl">
-            <div className="flex items-start gap-3">
-              <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center shrink-0">
-                <Bell className="w-6 h-6 text-amber-300" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold">Enable New Order Alerts</h2>
-                <p className="mt-2 text-sm text-[#cfc2b2] leading-relaxed">
-                  Allow notifications so Hotel Malabar can alert you when a new customer order arrives while the Admin page is not in front.
-                </p>
-                <p className="mt-2 text-xs text-[#a99d8e]">
-                  Tap Allow on the Android/Chrome permission box. Also keep Hotel Malabar notifications enabled in Android settings.
-                </p>
-              </div>
-            </div>
-            <div className="mt-5 flex gap-2">
-              <button type="button" onClick={handleDismissBackgroundAlertPopup} className="flex-1 rounded-xl border border-[#5b4728] bg-[#151210] px-4 py-3 text-sm font-semibold text-[#cfc2b2]">
-                Not Now
-              </button>
-              <button type="button" onClick={handleEnableBackgroundAlerts} className="flex-1 rounded-xl bg-[#e0b568] px-4 py-3 text-sm font-bold text-[#151210]">
-                Allow Alerts
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-) => {
+    return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
@@ -863,7 +822,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
         playNewOrderChime();
       }
 
-      // Send a system notification when permission is granted.
+      // Show temporary audio alert indicator banner
+      setAudioAlertBanner({
+        orderId: latestNewOrder.id,
+        orderNumber: latestNewOrder.orderNumber,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      });
+
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
         try {
           const notification = new Notification('HOTEL MALABAR - New Order', {
@@ -871,21 +836,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
             tag: 'hotel-malabar-order-' + latestNewOrder.id,
             requireInteraction: true,
           });
-          notification.onclick = () => {
-            window.focus();
-            notification.close();
-          };
+          notification.onclick = () => { window.focus(); notification.close(); };
         } catch (err) {
           console.warn('System notification notice:', err);
         }
       }
-
-      // Show temporary audio alert indicator banner
-      setAudioAlertBanner({
-        orderId: latestNewOrder.id,
-        orderNumber: latestNewOrder.orderNumber,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      });
 
       // Auto-print if enabled and not already printed
       if (autoPrintEnabled) {
@@ -1981,7 +1936,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   }
 
   return (
-    <div className="min-h-screen bg-[#0a1f13] text-[#fcfaf6] flex flex-col font-sans">
+    <>
+      {showBackgroundAlertPopup && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-amber-400/50 bg-[#211c16] p-6 text-[#f7f1e6] shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center shrink-0"><Bell className="w-6 h-6 text-amber-300" /></div>
+              <div><h2 className="text-lg font-bold">Enable New Order Alerts</h2><p className="mt-2 text-sm text-[#cfc2b2] leading-relaxed">Allow notifications so Hotel Malabar can alert you when a new customer order arrives while the Admin page is not in front.</p><p className="mt-2 text-xs text-[#a99d8e]">Tap Allow on the Android/Chrome permission box. Keep Hotel Malabar notifications enabled in Android settings.</p></div>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button type="button" onClick={handleDismissBackgroundAlertPopup} className="flex-1 rounded-xl border border-[#5b4728] bg-[#151210] px-4 py-3 text-sm font-semibold text-[#cfc2b2]">Not Now</button>
+              <button type="button" onClick={handleEnableBackgroundAlerts} className="flex-1 rounded-xl bg-[#e0b568] px-4 py-3 text-sm font-bold text-[#151210]">Allow Alerts</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="min-h-screen bg-[#0a1f13] text-[#fcfaf6] flex flex-col font-sans">
       {/* Top Admin Navigation Header */}
       <header className="bg-[#0f2d1c] border-b border-[#235836] sticky top-0 z-40 shadow-xl">
         <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
