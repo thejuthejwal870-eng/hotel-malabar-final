@@ -109,8 +109,8 @@ class MainActivity : Activity() {
         webView.settings.useWideViewPort = false
         webView.settings.loadWithOverviewMode = false
         webView.settings.setSupportZoom(false)
-        webView.settings.textZoom = 115
-        webView.setInitialScale(145)
+        webView.settings.textZoom = 100
+        webView.setInitialScale(100)
         webView.settings.mediaPlaybackRequiresUserGesture = false
         CookieManager.getInstance().setAcceptCookie(true)
         webView.webViewClient = object : WebViewClient() {
@@ -118,7 +118,7 @@ class MainActivity : Activity() {
                 if (!tokenInjected && url.startsWith(BASE_URL)) {
                     tokenInjected = true
                     val escaped = JSONObject.quote(token)
-                    view.evaluateJavascript("(function(){localStorage.setItem('hm_admin_token'," + escaped + "); location.reload();})()", null)
+                    view.evaluateJavascript("(function(){localStorage.setItem('hm_admin_token'," + escaped + "); document.body.classList.add('native-admin-mobile'); location.reload();})()", null)
                 }
             }
         }
