@@ -345,10 +345,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     if (!isAdminLoggedIn || !adminToken) return;
 
     fetchAllAdminData();
+    // Keep polling even when the admin page is in the background.
+    // The previous document.hidden guard stopped order checks completely
+    // when the tablet was switched to another app/screen, so new orders
+    // could be missed and the notification sound could never fire.
     const interval = setInterval(() => {
-      if (!document.hidden) {
-        fetchOrdersOnly();
-      }
+      fetchOrdersOnly();
     }, 4000);
 
     const handleVisibility = () => {
@@ -781,7 +783,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     if (brandNewPlacedOrders.length > 0) {
       const latestNewOrder = brandNewPlacedOrders[0];
 
-      // Play audio chime if sound is enabled (not muted)
+      // Play the kitchen alert for every genuinely new order.
+      // Do not require the admin page to be visible; this is intentionally
+      // triggered from the background polling path as well.
       if (soundEnabledRef.current) {
         unlockAudio();
         playNewOrderChime();
