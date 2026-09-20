@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="#151210">
+<LinearLayout android:id="@+id/loginPanel" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="28dp" android:gravity="center">
+<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="HOTEL MALABAR" android:textColor="#E0B568" android:textSize="30sp" android:textStyle="bold"/>
+<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Admin App" android:textColor="#F7F1E6" android:textSize="18sp"/>
+<EditText android:id="@+id/phoneInput" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="32dp" android:hint="Admin phone number" android:inputType="phone" android:textColor="#F7F1E6" android:textColorHint="#A99D8E" android:backgroundTint="#B98B43"/>
+<EditText android:id="@+id/passwordInput" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="12dp" android:hint="Password" android:inputType="textPassword" android:textColor="#F7F1E6" android:textColorHint="#A99D8E" android:backgroundTint="#B98B43"/>
+<Button android:id="@+id/loginButton" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="20dp" android:text="LOGIN" android:textStyle="bold"/>
+<TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:gravity="center" android:textColor="#F7F1E6" android:textSize="14sp"/>
+</LinearLayout>
+<WebView android:id="@+id/adminWebView" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone"/>
+</LinearLayout>
