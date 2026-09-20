@@ -344,6 +344,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   // Ask once when the admin dashboard opens for real background push notifications and audio unlock.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (document.body.classList.contains('native-admin-mobile')) {
+      setNotificationPermission('unsupported');
+      setBackgroundPushStatus('idle');
+      return;
+    }
     if ('Notification' in window) {
       const permission = Notification.permission;
       setNotificationPermission(permission);
@@ -877,6 +882,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   // Periodic sound reminder while there are unaccepted new orders (if repeat enabled)
   useEffect(() => {
     if (!isAdminLoggedIn) return;
+    if (typeof document !== 'undefined' && document.body.classList.contains('native-admin-mobile')) return;
 
     const reminderInterval = setInterval(() => {
       if (repeatSoundRef.current && soundEnabledRef.current) {
@@ -931,7 +937,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
       // Play the kitchen alert for every genuinely new order.
       // Do not require the admin page to be visible; this is intentionally
       // triggered from the background polling path as well.
-      if (soundEnabledRef.current) {
+      if (soundEnabledRef.current && !(typeof document !== 'undefined' && document.body.classList.contains('native-admin-mobile'))) {
         unlockAudio();
         playNewOrderChime();
       }
@@ -943,7 +949,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       });
 
-      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      if (typeof window !== 'undefined' && !document.body.classList.contains('native-admin-mobile') && 'Notification' in window && Notification.permission === 'granted') {
         try {
           const showPushNotification = async () => {
             const registration = await navigator.serviceWorker.ready;
