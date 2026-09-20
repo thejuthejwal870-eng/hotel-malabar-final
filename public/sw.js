@@ -16,7 +16,12 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'HOTEL MALABAR — New Order';
   const options = {
     body: data.body || 'A new customer order has been received.',
-    tag: data.orderId ? 'hotel-malabar-order-' + data.orderId : 'hotel-malabar-new-order',
+    // A new sequence creates a fresh Android notification event, so the
+    // tablet can play its notification sound/vibration repeatedly while the
+    // order remains unaccepted.
+    tag: data.orderId
+      ? 'hotel-malabar-order-' + data.orderId + '-' + String(data.alertSequence || Date.now())
+      : 'hotel-malabar-new-order-' + String(data.alertSequence || Date.now()),
     renotify: true,
     requireInteraction: true,
     silent: false,
@@ -28,7 +33,20 @@ self.addEventListener('push', (event) => {
     },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      const visibleClient = clients.find((client) => client.visibilityState === 'visible');
+      if (visibleClient) {
+        visibleClient.postMessage({
+          type: 'HOTEL_MALABAR_NEW_ORDER',
+          orderId: data.orderId || '',
+          orderNumber: data.orderNumber || '',
+        });
+        return;
+      }
+      return self.registration.showNotification(title, options);
+    })
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {
