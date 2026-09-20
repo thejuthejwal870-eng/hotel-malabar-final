@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="#151210">
 <LinearLayout android:id="@+id/loginPanel" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="28dp" android:gravity="center">
-<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="HOTEL MALABAR" android:textColor="#E0B568" android:textSize="30sp" android:textStyle="bold"/>
+<ImageView android:layout_width="112dp" android:layout_height="112dp" android:src="@drawable/hm_logo" android:contentDescription="@string/app_name" android:scaleType="fitCenter"/>
+<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="HOTEL MALABAR" android:textColor="#E0B568" android:textSize="30sp" android:textStyle="bold"/>
 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Admin App" android:textColor="#F7F1E6" android:textSize="18sp"/>
 <EditText android:id="@+id/phoneInput" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="32dp" android:hint="Admin phone number" android:inputType="phone" android:textColor="#F7F1E6" android:textColorHint="#A99D8E" android:backgroundTint="#B98B43"/>
 <EditText android:id="@+id/passwordInput" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="12dp" android:hint="Password" android:inputType="textPassword" android:textColor="#F7F1E6" android:textColorHint="#A99D8E" android:backgroundTint="#B98B43"/>
