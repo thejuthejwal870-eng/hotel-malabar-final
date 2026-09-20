@@ -178,6 +178,12 @@ export interface PushSubscriptionRecord {
   updatedAt: string;
 }
 
+export interface VapidConfigRecord {
+  publicKey: string;
+  privateKey: string;
+  subject: string;
+}
+
 export interface DatabaseData {
   users: UserRecord[];
   customerProfiles: CustomerProfileRecord[];
@@ -197,6 +203,7 @@ export interface DatabaseData {
   ratings?: FoodRatingRecord[];
   expenses?: ExpenseRecord[];
   pushSubscriptions?: PushSubscriptionRecord[];
+  vapidConfig?: VapidConfigRecord;
 }
 
 const isServerless = !!(
@@ -318,6 +325,19 @@ class CentralDatabase {
     this.version++;
     this.menuCache = null;
     this.saveData(this.data);
+  }
+
+  public getVapidConfig(): VapidConfigRecord | null {
+    return this.data.vapidConfig || null;
+  }
+
+  public setVapidConfig(config: VapidConfigRecord): void {
+    this.data.vapidConfig = {
+      publicKey: String(config.publicKey),
+      privateKey: String(config.privateKey),
+      subject: String(config.subject),
+    };
+    this.persist();
   }
 
   public getPushSubscriptions(): PushSubscriptionRecord[] {
