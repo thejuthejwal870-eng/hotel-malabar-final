@@ -1,4 +1,4 @@
-package in.malabarhotel.adminalerts
+package `in`.malabarhotel.adminalerts
 
 import android.app.Notification
 import android.app.NotificationChannel
