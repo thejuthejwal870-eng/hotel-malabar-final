@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.media.MediaPlayer
+import android.media.AudioAttributes
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -95,6 +96,7 @@ class OrderAlertService : Service() {
                     val file = File(cacheDir, "hotel-malabar-order-alert")
                     FileOutputStream(file).use { it.write(bytes) }
                     mediaPlayer = MediaPlayer().apply {
+                        setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
                         setDataSource(file.absolutePath)
                         isLooping = true
                         setVolume(1f, 1f)
@@ -104,8 +106,14 @@ class OrderAlertService : Service() {
                     return
                 }
             }
-            val mp = MediaPlayer.create(this, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
-            if (mp != null) { mp.isLooping = true; mp.start(); mediaPlayer = mp }
+            val mp = MediaPlayer().apply {
+                setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+                setDataSource(this@OrderAlertService, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+                isLooping = true
+                prepare()
+                start()
+            }
+            mediaPlayer = mp
         } catch (_: Exception) { stopAlertSound() }
     }
 
@@ -161,6 +169,14 @@ class OrderAlertService : Service() {
 
     private fun updateServiceNotification(text: String) {
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildServiceNotification(text))
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        try {
+            val restart = Intent(applicationContext, OrderAlertService::class.java).putExtra(EXTRA_TOKEN, token)
+            androidx.core.content.ContextCompat.startForegroundService(applicationContext, restart)
+        } catch (_: Exception) {}
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
