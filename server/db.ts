@@ -169,6 +169,15 @@ export interface RestaurantProfileRecord {
   isOnlineOrderOpen: boolean;
 }
 
+export interface PushSubscriptionRecord {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  updatedAt: string;
+}
+
 export interface DatabaseData {
   users: UserRecord[];
   customerProfiles: CustomerProfileRecord[];
@@ -187,6 +196,7 @@ export interface DatabaseData {
   nextOrderSequence: number;
   ratings?: FoodRatingRecord[];
   expenses?: ExpenseRecord[];
+  pushSubscriptions?: PushSubscriptionRecord[];
 }
 
 const isServerless = !!(
@@ -245,6 +255,9 @@ class CentralDatabase {
         if (!Array.isArray(parsed.ratings)) {
           parsed.ratings = [];
         }
+        if (!Array.isArray(parsed.pushSubscriptions)) {
+          parsed.pushSubscriptions = [];
+        }
         this.saveData(parsed);
         return parsed;
       } else if (isServerless && fs.existsSync(BUNDLED_DATA_FILE)) {
@@ -268,6 +281,9 @@ class CentralDatabase {
         }
         if (!Array.isArray(parsed.ratings)) {
           parsed.ratings = [];
+        }
+        if (!Array.isArray(parsed.pushSubscriptions)) {
+          parsed.pushSubscriptions = [];
         }
         this.saveData(parsed);
         return parsed;
@@ -302,6 +318,55 @@ class CentralDatabase {
     this.version++;
     this.menuCache = null;
     this.saveData(this.data);
+  }
+
+  public getPushSubscriptions(): PushSubscriptionRecord[] {
+    return Array.isArray(this.data.pushSubscriptions) ? [...this.data.pushSubscriptions] : [];
+  }
+
+  public upsertPushSubscription(subscription: PushSubscriptionRecord): void {
+    if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+      throw new Error('Invalid push subscription.');
+    }
+    if (!Array.isArray(this.data.pushSubscriptions)) {
+      this.data.pushSubscriptions = [];
+    }
+    const now = new Date().toISOString();
+    const next: PushSubscriptionRecord = {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth,
+      },
+      updatedAt: now,
+    };
+    const index = this.data.pushSubscriptions.findIndex((item) => item.endpoint === next.endpoint);
+    if (index >= 0) {
+      this.data.pushSubscriptions[index] = next;
+    } else {
+      this.data.pushSubscriptions.push(next);
+    }
+    this.persist();
+  }
+
+  public removePushSubscription(endpoint: string): void {
+    if (!Array.isArray(this.data.pushSubscriptions)) return;
+    this.data.pushSubscriptions = this.data.pushSubscriptions.filter((item) => item.endpoint !== endpoint);
+    this.persist();
+  }
+
+  public reloadFromDisk(): void {
+    try {
+      if (!fs.existsSync(DATA_FILE)) return;
+      const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      if (!parsed || !Array.isArray(parsed.users) || !Array.isArray(parsed.orders)) return;
+      if (!Array.isArray(parsed.pushSubscriptions)) parsed.pushSubscriptions = [];
+      this.data = parsed as DatabaseData;
+      this.menuCache = null;
+      this.version++;
+    } catch (error) {
+      console.error('Failed to reload database from disk:', error);
+    }
   }
 
   public getVersion(): number {
