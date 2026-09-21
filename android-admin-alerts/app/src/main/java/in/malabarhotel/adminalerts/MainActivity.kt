@@ -21,6 +21,8 @@ import android.os.Bundle
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
+import android.webkit.ValueCallback
 import android.webkit.JavascriptInterface
 import android.widget.Button
 import android.widget.EditText
@@ -43,11 +45,13 @@ class MainActivity : Activity() {
         const val PREFS = "hotel_malabar_admin"
         const val TOKEN = "admin_token"
         const val BATTERY_SETUP = "battery_setup_done"
+        const val FILE_CHOOSER_REQUEST = 702
     }
     private lateinit var loginPanel: LinearLayout
     private lateinit var webView: WebView
     private lateinit var statusText: TextView
     private var tokenInjected = false
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private val secureAlias = "HotelMalabarAdminKey"
     private val kotPrinterMac = "66:22:7B:91:DF:B2"
     private val sppUuid = java.util.UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
@@ -192,6 +196,31 @@ class MainActivity : Activity() {
         webView.visibility = android.view.View.VISIBLE
         webView.settings.javaScriptEnabled = true
         webView.addJavascriptInterface(NativePrinterBridge(), "AndroidPrinter")
+
+        // Android WebView does not open <input type="file"> unless a
+        // WebChromeClient handles the chooser callback. The Admin panel uses
+        // this for the custom alert-sound upload (and other file uploads).
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                view: WebView?,
+                filePath: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                this@MainActivity.filePathCallback?.onReceiveValue(null)
+                this@MainActivity.filePathCallback = filePath
+                return try {
+                    val chooserIntent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "audio/*"
+                    }
+                    startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST)
+                    true
+                } catch (_: Exception) {
+                    this@MainActivity.filePathCallback = null
+                    false
+                }
+            }
+        }
         webView.settings.domStorageEnabled = true
         // Keep the admin site in a normal responsive tablet/mobile viewport.
         webView.settings.useWideViewPort = true
@@ -328,6 +357,27 @@ class MainActivity : Activity() {
         text("PAYMENT: CASH ON DELIVERY"); line()
         center(); line(); bold(true); text(if (type == "KOT") "PREPARE FRESH & DELIVER QUICKLY" else "THANK YOU"); line(); bold(false)
         line(); line(); line(); cut()
+    }
+
+    @Deprecated("Android WebView file chooser API uses Activity result callbacks.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            val callback = filePathCallback
+            filePathCallback = null
+            val results = if (resultCode == RESULT_OK && data != null) {
+                val clipData = data.clipData
+                when {
+                    clipData != null -> Array(clipData.itemCount) { index -> clipData.getItemAt(index).uri }
+                    data.data != null -> arrayOf(data.data!!)
+                    else -> null
+                }
+            } else {
+                null
+            }
+            callback?.onReceiveValue(results)
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onBackPressed() {
