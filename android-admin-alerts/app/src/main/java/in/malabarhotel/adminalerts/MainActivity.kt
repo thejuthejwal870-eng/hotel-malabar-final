@@ -59,10 +59,6 @@ class MainActivity : Activity() {
         webView = findViewById(R.id.adminWebView)
         statusText = findViewById(R.id.statusText)
 
-        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 501)
-        }
-
         findViewById<Button>(R.id.loginButton).setOnClickListener {
             login(findViewById<EditText>(R.id.phoneInput).text.toString().trim(), findViewById<EditText>(R.id.passwordInput).text.toString())
         }
@@ -177,9 +173,6 @@ class MainActivity : Activity() {
         } catch (_: Exception) { null }
     }
     private fun requestAlertPermissionsIfNeeded() {
-        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 501)
-        }
         if (Build.VERSION.SDK_INT >= 23) {
             val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
             if (!pm.isIgnoringBatteryOptimizations(packageName)) {
