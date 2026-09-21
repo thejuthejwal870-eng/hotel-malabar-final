@@ -70,7 +70,7 @@ class OrderAlertService : Service() {
                 executor.execute { pollLoop() }
             }
             if (intent?.action == ACTION_TEST_SOUND) {
-                executor.execute { refreshAndPlayCustomSound(loop = false) }
+                Thread { refreshAndPlayCustomSound(loop = false) }.start()
             }
         }
         return START_STICKY
@@ -130,6 +130,7 @@ class OrderAlertService : Service() {
             status == "placed"
     }
 
+    @Synchronized
     private fun refreshAndPlayCustomSound(loop: Boolean = true) {
         try {
             if (!loop) testPlayback = true
@@ -216,6 +217,7 @@ class OrderAlertService : Service() {
         }
     }
 
+    @Synchronized
     @Suppress("DEPRECATION")
     private fun stopAlertSound() {
         try { mediaPlayer?.stop() } catch (_: Exception) {}
