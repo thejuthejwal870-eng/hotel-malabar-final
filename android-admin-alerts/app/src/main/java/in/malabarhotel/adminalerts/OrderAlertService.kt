@@ -8,11 +8,14 @@ import android.app.Service
 import android.content.Intent
 import android.media.MediaPlayer
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.os.IBinder
+import android.content.Context
 import androidx.core.app.NotificationCompat
 import java.io.File
 import java.io.FileOutputStream
@@ -26,7 +29,8 @@ import org.json.JSONObject
 class OrderAlertService : Service() {
     companion object {
         const val EXTRA_TOKEN = "token"
-        private const val CHANNEL_ID = "hotel_malabar_admin_service"
+        private const val CHANNEL_ID = "hotel_malabar_admin_service_v4_silent"
+        private const val POLL_MS = 1500L
         private const val NOTIFICATION_ID = 9401
         private const val API = "https://malabarhotel.in"
     }
@@ -39,6 +43,8 @@ class OrderAlertService : Service() {
     // from re-triggering a sound after an order has been accepted/rejected.
     private val alertedOrderIds = mutableSetOf<String>()
     private var initialized = false
+    private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    private var audioFocusRequest: AudioFocusRequest? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -93,7 +99,7 @@ class OrderAlertService : Service() {
                     updateServiceNotification("Admin session expired — open the app to sign in again")
                 }
             } catch (_: Exception) {}
-            Thread.sleep(3000)
+            Thread.sleep(POLL_MS)
         }
     }
 
@@ -101,41 +107,87 @@ class OrderAlertService : Service() {
 
     private fun refreshAndPlayCustomSound() {
         try {
-            val response = apiGet("/api/admin/sound-settings")
-            val audioData = JSONObject(response.body).optString("audioData", "")
             stopAlertSound()
-            if (audioData.startsWith("data:")) {
-                val comma = audioData.indexOf(',')
-                if (comma > 0) {
-                    val bytes = Base64.getDecoder().decode(audioData.substring(comma + 1))
-                    val file = File(cacheDir, "hotel-malabar-order-alert")
-                    FileOutputStream(file).use { it.write(bytes) }
-                    mediaPlayer = MediaPlayer().apply {
-                        setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-                        setDataSource(file.absolutePath)
-                        isLooping = true
-                        setVolume(1f, 1f)
-                        prepare()
-                        start()
-                    }
-                    return
-                }
-            }
-            val mp = MediaPlayer().apply {
-                setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-                setDataSource(this@OrderAlertService, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+            val response = apiGet("/api/admin/sound-settings")
+            if (response.code != 200) return
+
+            val audioData = JSONObject(response.body).optString("audioData", "")
+            // The native app must use ONLY the uploaded custom sound. Never fall
+            // back to an Android notification/default ringtone.
+            if (!audioData.startsWith("data:")) return
+
+            val comma = audioData.indexOf(',')
+            if (comma <= 0) return
+            val bytes = Base64.getDecoder().decode(audioData.substring(comma + 1))
+            if (bytes.isEmpty()) return
+
+            val file = File(cacheDir, "hotel-malabar-order-alert")
+            FileOutputStream(file).use { it.write(bytes) }
+
+            requestAudioFocus()
+            mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                setDataSource(file.absolutePath)
                 isLooping = true
+                setVolume(1f, 1f)
+                setOnErrorListener { _, _, _ ->
+                    stopAlertSound()
+                    true
+                }
                 prepare()
                 start()
             }
-            mediaPlayer = mp
-        } catch (_: Exception) { stopAlertSound() }
+        } catch (_: Exception) {
+            stopAlertSound()
+        }
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .setAcceptsDelayedFocusGain(false)
+                    .setWillPauseWhenDucked(false)
+                    .build()
+                audioFocusRequest = request
+                audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.requestAudioFocus(
+                    null,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+                ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun stopAlertSound() {
         try { mediaPlayer?.stop() } catch (_: Exception) {}
         try { mediaPlayer?.release() } catch (_: Exception) {}
         mediaPlayer = null
+        try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+                audioFocusRequest = null
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.abandonAudioFocus(null)
+            }
+        } catch (_: Exception) {}
     }
 
     private fun vibrate() {
@@ -169,9 +221,11 @@ class OrderAlertService : Service() {
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
             val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Hotel Malabar Admin Service", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Keeps the admin order alert service active."
+            manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Hotel Malabar Admin Service", NotificationManager.IMPORTANCE_MIN).apply {
+                description = "Silent background service for Hotel Malabar order alerts."
                 setSound(null, null)
+                enableVibration(false)
+                setShowBadge(false)
             })
         }
     }
@@ -179,7 +233,7 @@ class OrderAlertService : Service() {
     private fun buildServiceNotification(text: String): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
-        return NotificationCompat.Builder(this, CHANNEL_ID).setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle("HOTEL MALABAR").setContentText(text).setOngoing(true).setCategory(NotificationCompat.CATEGORY_SERVICE).setContentIntent(pendingIntent).build()
+        return NotificationCompat.Builder(this, CHANNEL_ID).setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle("HOTEL MALABAR").setContentText(text).setOngoing(true).setSilent(true).setOnlyAlertOnce(true).setCategory(NotificationCompat.CATEGORY_SERVICE).setContentIntent(pendingIntent).build()
     }
 
     private fun updateServiceNotification(text: String) {
