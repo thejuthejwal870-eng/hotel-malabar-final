@@ -28,7 +28,7 @@ import android.content.pm.ServiceInfo
 class OrderAlertService : Service() {
     companion object {
         const val EXTRA_TOKEN = "token"
-        private const val CHANNEL_ID = "hotel_malabar_admin_service_v2"
+        private const val CHANNEL_ID = "hotel_malabar_admin_service_v3_silent"
         private const val NOTIFICATION_ID = 9401
         private const val API = "https://malabarhotel.in"
     }
@@ -37,6 +37,8 @@ class OrderAlertService : Service() {
     private var running = true
     private var mediaPlayer: MediaPlayer? = null
     private var pendingIds = emptySet<String>()
+    // Prevent a delayed/stale API response from re-alerting an order that was already handled.
+    private val alertedOrderIds = mutableSetOf<String>()
     private var initialized = false
     private var pollStarted = false
     private var lastServiceText = ""
@@ -81,13 +83,16 @@ class OrderAlertService : Service() {
                     // already-pending order when the service/app starts.
                     if (!initialized) {
                         initialized = true
+                        // Existing pending orders are only the startup baseline.
+                        alertedOrderIds.addAll(pendingIds)
                         stopAlertSound()
                     } else if (pendingIds.isEmpty()) {
                         // All pending orders have been accepted/rejected.
                         stopAlertSound()
                     } else {
-                        val newlyArrived = pendingIds - previousPending
+                        val newlyArrived = (pendingIds - previousPending) - alertedOrderIds
                         if (newlyArrived.isNotEmpty() && mediaPlayer == null) {
+                            alertedOrderIds.addAll(newlyArrived)
                             vibrate()
                             refreshAndPlayCustomSound()
                         }
@@ -108,7 +113,7 @@ class OrderAlertService : Service() {
         try {
             requestAudioFocus()
             val response = apiGet("/api/admin/sound-settings")
-            val audioData = JSONObject(response.body).optString("audioData", "")
+            val audioData = if (response.code == 200) JSONObject(response.body).optString("audioData", "") else ""
             stopAlertSound()
             if (audioData.startsWith("data:")) {
                 val comma = audioData.indexOf(',')
@@ -125,7 +130,7 @@ class OrderAlertService : Service() {
                     mediaPlayer = MediaPlayer().apply {
                         setAudioAttributes(
                             AudioAttributes.Builder()
-                                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                                .setUsage(AudioAttributes.USAGE_ALARM)
                                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                                 .build()
                         )
@@ -139,11 +144,12 @@ class OrderAlertService : Service() {
                     return
                 }
             }
-            val uri = android.provider.RingtoneManager.getDefaultUri(android.provider.RingtoneManager.TYPE_NOTIFICATION)
+            val uri = (android.provider.RingtoneManager.getDefaultUri(android.provider.RingtoneManager.TYPE_ALARM)
+                ?: android.provider.RingtoneManager.getDefaultUri(android.provider.RingtoneManager.TYPE_NOTIFICATION))
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setUsage(AudioAttributes.USAGE_ALARM)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build()
                 )
@@ -157,11 +163,12 @@ class OrderAlertService : Service() {
         } catch (_: Exception) {
             stopAlertSound()
             try {
-                val uri = android.provider.RingtoneManager.getDefaultUri(android.provider.RingtoneManager.TYPE_NOTIFICATION)
+                val uri = (android.provider.RingtoneManager.getDefaultUri(android.provider.RingtoneManager.TYPE_ALARM)
+                ?: android.provider.RingtoneManager.getDefaultUri(android.provider.RingtoneManager.TYPE_NOTIFICATION))
                 mediaPlayer = MediaPlayer().apply {
                     setAudioAttributes(
                         AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                            .setUsage(AudioAttributes.USAGE_ALARM)
                             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                             .build()
                     )
@@ -188,7 +195,7 @@ class OrderAlertService : Service() {
                 val request = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
                     .setAudioAttributes(
                         AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                            .setUsage(AudioAttributes.USAGE_ALARM)
                             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                             .build()
                     )
@@ -197,7 +204,7 @@ class OrderAlertService : Service() {
                 audioFocusGranted = manager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
             } else {
                 @Suppress("DEPRECATION")
-                audioFocusGranted = manager.requestAudioFocus(null, AudioManager.STREAM_NOTIFICATION, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                audioFocusGranted = manager.requestAudioFocus(null, AudioManager.STREAM_ALARM, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
             }
         } catch (_: Exception) {}
     }
