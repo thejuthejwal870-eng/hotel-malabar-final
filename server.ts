@@ -115,6 +115,39 @@ function isOrderTodayServer(value: string): boolean {
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
+async function sendOrderStatusPush(order: any): Promise<void> {
+  try {
+    const vapid = await getVapidConfig();
+    await syncFromSupabase();
+    db.reloadFromDisk();
+    const subscriptions = db.getPushSubscriptions();
+    if (!subscriptions.length) return;
+
+    const payload = JSON.stringify({
+      type: 'ORDER_STATUS',
+      status: String(order.status || ''),
+      orderId: String(order.id || ''),
+      orderNumber: String(order.orderNumber || ''),
+      url: '/admin',
+    });
+
+    webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
+    await Promise.all(subscriptions.map(async (subscription) => {
+      try {
+        await webpush.sendNotification(subscription as any, payload, {
+          TTL: 30,
+          urgency: 'normal',
+        });
+      } catch (err: any) {
+        const code = Number(err?.statusCode || 0);
+        if (code === 404 || code === 410) db.removePushSubscription(subscription.endpoint);
+      }
+    }));
+  } catch (err) {
+    console.warn('Order status push failed:', err);
+  }
+}
+
 async function sendNewOrderPush(order: any): Promise<void> {
   try {
     const vapid = await getVapidConfig();
@@ -982,6 +1015,8 @@ app.put('/api/admin/orders/:orderId/status', requireAdminAuth, async (req: Reque
     }
 
     broadcastAdminOrderEvent(updated);
+    // Tell any browser service worker to close the old order notification immediately.
+    void sendOrderStatusPush(updated);
 
     res.json({ order: updated, message: `Order status updated to ${status}.` });
   } catch (err: any) {
