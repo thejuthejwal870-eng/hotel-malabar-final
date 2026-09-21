@@ -45,6 +45,8 @@ class OrderAlertService : Service() {
     private var initialized = false
     private var audioFocusGranted = false
     private var audioFocusRequest: android.media.AudioFocusRequest? = null
+    @Volatile private var pollStarted = false
+    @Volatile private var testPlayback = false
 
     private val audioManager by lazy {
         getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -63,10 +65,13 @@ class OrderAlertService : Service() {
             return START_NOT_STICKY
         }
         if (!executor.isShutdown) {
+            if (!pollStarted) {
+                pollStarted = true
+                executor.execute { pollLoop() }
+            }
             if (intent?.action == ACTION_TEST_SOUND) {
                 executor.execute { refreshAndPlayCustomSound(loop = false) }
             }
-            executor.execute { pollLoop() }
         }
         return START_STICKY
     }
@@ -92,15 +97,15 @@ class OrderAlertService : Service() {
                     if (!initialized) {
                         initialized = true
                         alertedOrderIds.addAll(pendingIds)
-                        stopAlertSound()
+                        if (!testPlayback) stopAlertSound()
                     } else if (pendingIds.isEmpty()) {
-                        stopAlertSound()
+                        if (!testPlayback) stopAlertSound()
                     } else {
                         val newlyArrived = (pendingIds - previousPending) - alertedOrderIds
                         if (newlyArrived.isNotEmpty()) {
                             alertedOrderIds.addAll(newlyArrived)
                             vibrate()
-                            if (mediaPlayer == null) refreshAndPlayCustomSound()
+                            if (mediaPlayer == null && !testPlayback) refreshAndPlayCustomSound()
                         }
                     }
                 } else if (response.code == 401 || response.code == 403) {
@@ -127,6 +132,7 @@ class OrderAlertService : Service() {
 
     private fun refreshAndPlayCustomSound(loop: Boolean = true) {
         try {
+            if (!loop) testPlayback = true
             stopAlertSound()
 
             val response = apiGet("/api/admin/sound-settings?sync=1")
@@ -163,9 +169,13 @@ class OrderAlertService : Service() {
                 isLooping = loop
                 setVolume(1f, 1f)
                 setOnCompletionListener {
-                    if (!loop) stopAlertSound()
+                    if (!loop) {
+                        testPlayback = false
+                        stopAlertSound()
+                    }
                 }
                 setOnErrorListener { _, _, _ ->
+                    testPlayback = false
                     stopAlertSound()
                     true
                 }
@@ -173,6 +183,7 @@ class OrderAlertService : Service() {
                 start()
             }
         } catch (_: Exception) {
+            testPlayback = false
             stopAlertSound()
         }
     }
