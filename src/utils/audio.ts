@@ -170,6 +170,12 @@ export function playDefaultWebAudioChime(volume = 0.8) {
  */
 export function playNewOrderChime(volume = 0.8) {
   try {
+    const nativePrinter = typeof window !== 'undefined' ? (window as any).AndroidPrinter : null;
+    if (nativePrinter?.playUploadedAlertSound && currentCustomAudioData) {
+      nativePrinter.playUploadedAlertSound();
+      return;
+    }
+
     if (currentCustomAudioData) {
       if (!customAudioElement || customAudioElement.src !== currentCustomAudioData) {
         customAudioElement = new Audio(currentCustomAudioData);
@@ -198,6 +204,11 @@ export function playNewOrderChime(volume = 0.8) {
  * Shorter single chime for audio testing and button confirmation
  */
 export function playTestChime() {
+  const nativePrinter = typeof window !== 'undefined' ? (window as any).AndroidPrinter : null;
+  if (nativePrinter?.playUploadedAlertSound && currentCustomAudioData) {
+    nativePrinter.playUploadedAlertSound();
+    return;
+  }
   if (currentCustomAudioData) {
     playNewOrderChime(0.8);
     return;
