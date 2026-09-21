@@ -439,8 +439,12 @@ app.get('/api/settings', (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/admin/sound-settings', (req: Request, res: Response) => {
+app.get('/api/admin/sound-settings', async (req: Request, res: Response) => {
   try {
+    // Always refresh from the shared cloud database so the native Android
+    // admin app can read the uploaded custom sound from a fresh instance.
+    await syncFromSupabase();
+    db.reloadFromDisk();
     const notificationSound = db.getNotificationSound();
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
