@@ -952,7 +952,7 @@ app.delete('/api/admin/expenses/:id', requireAdminAuth, (req: Request, res: Resp
 });
 
 // Update Order Status & Prep Time
-app.put('/api/admin/orders/:orderId/status', requireAdminAuth, (req: Request, res: Response) => {
+app.put('/api/admin/orders/:orderId/status', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { status, estimatedPrepTimeMinutes, preparationMinutes, rejectionReason } = req.body;
     if (!status) {
@@ -973,9 +973,14 @@ app.put('/api/admin/orders/:orderId/status', requireAdminAuth, (req: Request, re
       rejectionReason
     );
 
-    // Persist status changes to the cloud immediately so native background
-    // alert clients see ACCEPTED/REJECTED without waiting for a later sync.
-    void syncToSupabase().catch(() => {});
+    // Finish the cloud write BEFORE responding. The native alert service polls
+    // the cloud snapshot, so this prevents a stale PENDING status from briefly
+    // bringing the alert back after ACCEPTED/REJECTED.
+    const cloudSaved = await syncToSupabase();
+    if (!cloudSaved) {
+      return res.status(503).json({ error: 'Order status could not be synchronized to the cloud. Please try again.' });
+    }
+
     broadcastAdminOrderEvent(updated);
 
     res.json({ order: updated, message: `Order status updated to ${status}.` });
