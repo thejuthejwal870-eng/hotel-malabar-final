@@ -111,10 +111,10 @@ class OrderAlertService : Service() {
 
     private fun refreshAndPlayCustomSound() {
         try {
+            stopAlertSound()
             requestAudioFocus()
             val response = apiGet("/api/admin/sound-settings")
             val audioData = if (response.code == 200) JSONObject(response.body).optString("audioData", "") else ""
-            stopAlertSound()
             if (audioData.startsWith("data:")) {
                 val comma = audioData.indexOf(',')
                 if (comma > 0) {
