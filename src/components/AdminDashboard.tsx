@@ -2603,14 +2603,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                  <label className="bg-[#143d26] hover:bg-[#1a4e31] border border-[#dfb64c]/50 hover:border-[#dfb64c] text-[#dfb64c] hover:text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all">
+                  <label className="relative overflow-hidden bg-[#143d26] hover:bg-[#1a4e31] border border-[#dfb64c]/50 hover:border-[#dfb64c] text-[#dfb64c] hover:text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all">
                     <Upload className="w-3.5 h-3.5" />
                     <span>Upload Custom Sound</span>
                     <input
                       type="file"
                       accept="audio/*,.mp3,.wav,.ogg,.m4a"
                       onChange={handleCustomSoundUpload}
-                      className="sr-only"
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                      aria-label="Upload custom alert sound"
                     />
                   </label>
 
