@@ -448,13 +448,19 @@ app.get('/api/admin/sound-settings', (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/admin/sound-settings', requireAdminAuth, (req: Request, res: Response) => {
+app.post('/api/admin/sound-settings', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { name, audioData } = req.body;
     const updated = db.updateNotificationSound({
       name: typeof name === 'string' && name.trim() ? name.trim() : 'Hotel Malabar Default Bell (Authentic 3-Strike MP3 Chime)',
       audioData: typeof audioData === 'string' && audioData.trim() ? audioData.trim() : null,
     });
+    // Keep the alert sound in cloud storage so native admin devices can
+    // continue using the same sound after a server restart/redeploy.
+    const cloudSaved = await syncToSupabase();
+    if (!cloudSaved) {
+      return res.status(503).json({ error: 'Alert sound could not be saved to the cloud. Please try again.' });
+    }
     res.json({ success: true, notificationSound: updated });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
