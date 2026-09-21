@@ -79,7 +79,7 @@ class OrderAlertService : Service() {
     private fun pollLoop() {
         while (running) {
             try {
-                val response = apiGet("/api/admin/orders?sync=1")
+                val response = apiGet("/api/admin/orders")
                 if (response.code == 200) {
                     val json = JSONArray(response.body)
                     val currentPending = mutableSetOf<String>()
@@ -136,7 +136,7 @@ class OrderAlertService : Service() {
             if (!loop) testPlayback = true
             stopAlertSound()
 
-            val response = apiGet("/api/admin/sound-settings?sync=1")
+            val response = apiGet("/api/admin/sound-settings")
             if (response.code != 200) return
 
             val audioData = JSONObject(response.body).optString("audioData", "")
