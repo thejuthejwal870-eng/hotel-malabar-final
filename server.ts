@@ -190,6 +190,8 @@ async function sendNewOrderPush(order: any): Promise<void> {
   }
 }
 
+// Background order alerts are sent once when the order is created.
+// Do not run a repeating pending-order push loop: it can deliver a stale alert after acceptance.
 app.use(express.json({ limit: '35mb' }));
 app.use(express.urlencoded({ extended: true, limit: '35mb' }));
 
@@ -1015,9 +1017,6 @@ app.put('/api/admin/orders/:orderId/status', requireAdminAuth, async (req: Reque
     }
 
     broadcastAdminOrderEvent(updated);
-    // Tell any browser service worker to close the old order notification immediately.
-    void sendOrderStatusPush(updated);
-
     res.json({ order: updated, message: `Order status updated to ${status}.` });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
