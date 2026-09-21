@@ -157,7 +157,7 @@ async function sendNewOrderPush(order: any): Promise<void> {
   }
 }
 
-setInterval(() => { void sendPendingOrderAlerts(); }, 15000);\n\napp.use(express.json({ limit: '35mb' }));
+app.use(express.json({ limit: '35mb' }));
 app.use(express.urlencoded({ extended: true, limit: '35mb' }));
 
 // Permissive CORS headers for API requests
@@ -442,6 +442,8 @@ app.get('/api/settings', (req: Request, res: Response) => {
 app.get('/api/admin/sound-settings', (req: Request, res: Response) => {
   try {
     const notificationSound = db.getNotificationSound();
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
     res.json(notificationSound);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -624,7 +626,6 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
     // Notify every currently connected Admin dashboard immediately. Polling and
     // Web Push remain as fallbacks for background/throttled browser sessions.
     broadcastAdminOrderEvent(order);
-    void sendNewOrderPush(order);
 
     res.status(201).json({
       message: `Order ${order.orderNumber} placed successfully! Preparing for cash on delivery.`,
