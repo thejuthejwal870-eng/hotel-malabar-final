@@ -251,6 +251,19 @@ class MainActivity : Activity() {
         } catch (_: Exception) { false }
 
         @JavascriptInterface
+        fun playUploadedAlertSound() {
+            try {
+                val intent = Intent(this@MainActivity, OrderAlertService::class.java)
+                    .setAction(OrderAlertService.ACTION_TEST_SOUND)
+                    .putExtra(
+                        OrderAlertService.EXTRA_TOKEN,
+                        getSharedPreferences(PREFS, MODE_PRIVATE).getString(TOKEN, "")
+                    )
+                ContextCompat.startForegroundService(this@MainActivity, intent)
+            } catch (_: Exception) {}
+        }
+
+        @JavascriptInterface
         fun printKOT(orderJson: String, type: String, paperWidth: String) {
             Thread {
                 try {
