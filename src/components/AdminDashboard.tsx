@@ -341,26 +341,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     }
   };
 
-  // Ask once when the admin dashboard opens for real background push notifications and audio unlock.
+  // Background notifications are intentionally disabled. The native Android admin app
+  // owns background order alerts so there is no second notification tone/channel.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (document.body.classList.contains('native-admin-mobile')) {
-      setNotificationPermission('unsupported');
-      setBackgroundPushStatus('idle');
-      return;
-    }
-    if ('Notification' in window) {
-      const permission = Notification.permission;
-      setNotificationPermission(permission);
-      if (permission === 'granted' && adminToken) {
-        void setupBackgroundPushSubscription(adminToken);
-      } else if (
-        permission !== 'granted' &&
-        localStorage.getItem('hm_admin_background_alert_prompted') !== 'true'
-      ) {
-        setShowBackgroundAlertPopup(true);
-      }
-    }
+    setNotificationPermission('unsupported');
+    setBackgroundPushStatus('idle');
+    setShowBackgroundAlertPopup(false);
   }, [adminToken]);
 
   const handleEnableBackgroundAlerts = async () => {
@@ -791,20 +778,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
           }
         }
 
-        // Save to backend database if admin token is available
-        if (adminToken) {
-          try {
-            await fetch('/api/admin/sound-settings', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${adminToken}`,
-              },
-              body: JSON.stringify({ name: soundName, audioData }),
-            });
-          } catch (err) {
-            console.warn('Failed to sync sound to server:', err);
-          }
+        // Save to backend/cloud. Native background alerts read this exact stored
+        // data, so do not report success if the server did not save it.
+        if (!adminToken) {
+          setSoundUploadError('Admin session is not ready. Please sign in again before saving the alert sound.');
+          return;
+        }
+        const saveResponse = await fetch('/api/admin/sound-settings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminToken}`,
+          },
+          body: JSON.stringify({ name: soundName, audioData }),
+        });
+        const saveData = await saveResponse.json().catch(() => ({}));
+        if (!saveResponse.ok) {
+          setSoundUploadError(saveData.error || 'The alert sound could not be saved to the server.');
+          return;
         }
 
         // Test play the uploaded sound immediately so admin can verify
@@ -949,26 +940,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       });
 
-      if (typeof window !== 'undefined' && !document.body.classList.contains('native-admin-mobile') && 'Notification' in window && Notification.permission === 'granted') {
-        try {
-          const showPushNotification = async () => {
-            const registration = await navigator.serviceWorker.ready;
-            await registration.showNotification('HOTEL MALABAR - New Order', {
-              body: 'Order ' + latestNewOrder.orderNumber + ' received. Please open the Admin panel.',
-              tag: 'hotel-malabar-order-' + latestNewOrder.id,
-              renotify: true,
-              requireInteraction: true,
-              vibrate: [250, 120, 250, 120, 400],
-              data: { url: '/admin', orderId: latestNewOrder.id },
-            });
-          };
-          if ('serviceWorker' in navigator) {
-            void showPushNotification();
-          }
-        } catch (err) {
-          console.warn('System notification notice:', err);
-        }
-      }
+
 
       // Auto-print if enabled and not already printed
       if (autoPrintEnabled) {
