@@ -20,7 +20,7 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       const message = {
-        type: 'HOTEL_MALABAR_NEW_ORDER',
+        type: data.type === 'NEW_ORDER' ? 'HOTEL_MALABAR_NEW_ORDER' : 'HOTEL_MALABAR_ORDER_STATUS',
         orderId: data.orderId || '',
         orderNumber: data.orderNumber || '',
       };
