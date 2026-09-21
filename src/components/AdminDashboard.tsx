@@ -798,11 +798,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
           return;
         }
 
-        // Test play the uploaded sound immediately so admin can verify
-        unlockAudio();
+        // Test the uploaded sound immediately. Native Android uses the same
+        // foreground-service player that handles real background orders.
         setIsSoundTesting(true);
-        playNewOrderChime();
-        setTimeout(() => setIsSoundTesting(false), 2000);
+        const nativePrinter = typeof window !== 'undefined' ? (window as any).AndroidPrinter : null;
+        if (
+          typeof document !== 'undefined' &&
+          document.body.classList.contains('native-admin-mobile') &&
+          nativePrinter?.playUploadedAlertSound
+        ) {
+          nativePrinter.playUploadedAlertSound();
+        } else {
+          unlockAudio();
+          playNewOrderChime();
+        }
+        setTimeout(() => setIsSoundTesting(false), 2500);
 
         setSoundSuccessToast(`Custom sound "${soundName}" uploaded and set active!`);
         setTimeout(() => setSoundSuccessToast(null), 4000);
@@ -852,10 +862,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
     setTimeout(() => setSoundSuccessToast(null), 4000);
   };
 
-  // Test sound alert button
+  // Test sound alert button. In the native Android admin app, use the
+  // foreground service so the exact uploaded server sound is tested directly.
   const handleTestSoundAlert = () => {
-    unlockAudio();
     setIsSoundTesting(true);
+    const nativePrinter = typeof window !== 'undefined' ? (window as any).AndroidPrinter : null;
+    if (
+      typeof document !== 'undefined' &&
+      document.body.classList.contains('native-admin-mobile') &&
+      nativePrinter?.playUploadedAlertSound
+    ) {
+      nativePrinter.playUploadedAlertSound();
+      setTimeout(() => setIsSoundTesting(false), 2500);
+      return;
+    }
+
+    unlockAudio();
     playNewOrderChime();
     setTimeout(() => setIsSoundTesting(false), 2000);
   };
