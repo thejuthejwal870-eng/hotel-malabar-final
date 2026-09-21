@@ -1,4 +1,8 @@
-/* Hotel Malabar background order notification service worker. */
+/* Hotel Malabar background push bridge.
+ * Native Android Admin is responsible for audible order alerts.
+ * This service worker deliberately NEVER creates a system notification
+ * or notification tone for an order.
+ */
 self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', (event) => {
@@ -13,37 +17,22 @@ self.addEventListener('push', (event) => {
     data = { body: event.data ? event.data.text() : 'New order received.' };
   }
 
-  const title = data.title || 'HOTEL MALABAR — New Order';
-  const options = {
-    body: data.body || 'A new customer order has been received.',
-    // A new sequence creates a fresh Android notification event, so the
-    // tablet can play its notification sound/vibration repeatedly while the
-    // order remains unaccepted.
-    tag: data.orderId
-      ? 'hotel-malabar-order-' + data.orderId + '-' + String(data.alertSequence || Date.now())
-      : 'hotel-malabar-new-order-' + String(data.alertSequence || Date.now()),
-    renotify: false,
-    requireInteraction: false,
-    silent: true,
-    data: {
-      url: data.url || '/admin',
-      orderId: data.orderId || '',
-      orderNumber: data.orderNumber || '',
-    },
-  };
-
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      const visibleClient = clients.find((client) => client.visibilityState === 'visible');
-      if (visibleClient) {
-        visibleClient.postMessage({
-          type: 'HOTEL_MALABAR_NEW_ORDER',
-          orderId: data.orderId || '',
-          orderNumber: data.orderNumber || '',
-        });
-        return;
+      const message = {
+        type: 'HOTEL_MALABAR_NEW_ORDER',
+        orderId: data.orderId || '',
+        orderNumber: data.orderNumber || '',
+      };
+
+      for (const client of clients) {
+        try {
+          client.postMessage(message);
+        } catch {}
       }
-      return self.registration.showNotification(title, options);
+
+      // Intentionally do not call showNotification().
+      // No browser/Chrome notification tone is part of the Hotel Malabar alert flow.
     })
   );
 });
