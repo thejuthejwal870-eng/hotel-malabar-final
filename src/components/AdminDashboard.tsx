@@ -451,7 +451,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
     const handleServiceWorkerMessage = (event: MessageEvent) => {
+      // Only a NEW_ORDER event may start the kitchen sound.
+      // ACCEPTED/REJECTED status pushes must never start or restart audio.
       if (event.data?.type !== 'HOTEL_MALABAR_NEW_ORDER') return;
+      if (event.data?.orderId && !event.data?.isNewOrder) return;
       if (!soundEnabledRef.current) return;
       unlockAudio();
       playNewOrderChime();
