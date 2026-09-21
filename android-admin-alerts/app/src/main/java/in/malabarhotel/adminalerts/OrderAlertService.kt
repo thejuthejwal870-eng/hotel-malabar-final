@@ -33,6 +33,7 @@ class OrderAlertService : Service() {
         private const val POLL_MS = 2000L
         private const val NOTIFICATION_ID = 9401
         private const val API = "https://malabarhotel.in"
+        const val ACTION_TEST_SOUND = "in.malabarhotel.adminalerts.TEST_SOUND"
     }
 
     private val executor = Executors.newSingleThreadExecutor()
@@ -43,6 +44,7 @@ class OrderAlertService : Service() {
     private val alertedOrderIds = mutableSetOf<String>()
     private var initialized = false
     private var audioFocusGranted = false
+    private var audioFocusRequest: android.media.AudioFocusRequest? = null
 
     private val audioManager by lazy {
         getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -60,7 +62,12 @@ class OrderAlertService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (!executor.isShutdown) executor.execute { pollLoop() }
+        if (!executor.isShutdown) {
+            if (intent?.action == ACTION_TEST_SOUND) {
+                executor.execute { refreshAndPlayCustomSound(loop = false) }
+            }
+            executor.execute { pollLoop() }
+        }
         return START_STICKY
     }
 
@@ -118,7 +125,7 @@ class OrderAlertService : Service() {
             status == "placed"
     }
 
-    private fun refreshAndPlayCustomSound() {
+    private fun refreshAndPlayCustomSound(loop: Boolean = true) {
         try {
             stopAlertSound()
 
@@ -148,13 +155,16 @@ class OrderAlertService : Service() {
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setUsage(AudioAttributes.USAGE_ALARM)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build()
                 )
                 setDataSource(file.absolutePath)
-                isLooping = true
+                isLooping = loop
                 setVolume(1f, 1f)
+                setOnCompletionListener {
+                    if (!loop) stopAlertSound()
+                }
                 setOnErrorListener { _, _, _ ->
                     stopAlertSound()
                     true
@@ -167,15 +177,29 @@ class OrderAlertService : Service() {
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun requestAudioFocus() {
         try {
-            audioFocusGranted =
-                audioManager.requestAudioFocus(
+            if (Build.VERSION.SDK_INT >= 26) {
+                val request = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .setAcceptsDelayedFocusGain(false)
+                    .setWillPauseWhenDucked(false)
+                    .build()
+                audioFocusRequest = request
+                audioFocusGranted = audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            } else {
+                @Suppress("DEPRECATION")
+                audioFocusGranted = audioManager.requestAudioFocus(
                     null,
-                    AudioManager.STREAM_MUSIC,
+                    AudioManager.STREAM_ALARM,
                     AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
                 ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            }
         } catch (_: Exception) {
             audioFocusGranted = false
         }
@@ -188,7 +212,15 @@ class OrderAlertService : Service() {
         mediaPlayer = null
 
         if (audioFocusGranted) {
-            try { audioManager.abandonAudioFocus(null) } catch (_: Exception) {}
+            try {
+                if (Build.VERSION.SDK_INT >= 26) {
+                    audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+                } else {
+                    @Suppress("DEPRECATION")
+                    audioManager.abandonAudioFocus(null)
+                }
+            } catch (_: Exception) {}
+            audioFocusRequest = null
             audioFocusGranted = false
         }
     }
