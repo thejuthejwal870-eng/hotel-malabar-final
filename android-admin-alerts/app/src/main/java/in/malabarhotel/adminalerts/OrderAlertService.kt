@@ -30,7 +30,7 @@ class OrderAlertService : Service() {
     companion object {
         const val EXTRA_TOKEN = "token"
         private const val CHANNEL_ID = "hotel_malabar_admin_service_v5_silent"
-        private const val POLL_MS = 2000L
+        private const val POLL_MS = 10000L
         private const val NOTIFICATION_ID = 9401
         private const val API = "https://malabarhotel.in"
         const val ACTION_TEST_SOUND = "in.malabarhotel.adminalerts.TEST_SOUND"
@@ -79,7 +79,7 @@ class OrderAlertService : Service() {
     private fun pollLoop() {
         while (running) {
             try {
-                val response = apiGet("/api/admin/orders")
+                val response = apiGet("/api/admin/orders/pending-ids")
                 if (response.code == 200) {
                     val json = JSONArray(response.body)
                     val currentPending = mutableSetOf<String>()
