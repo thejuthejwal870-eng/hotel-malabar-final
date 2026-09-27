@@ -901,6 +901,32 @@ app.get('/api/admin/orders', requireAdminAuth, async (req: Request, res: Respons
   }
 });
 
+app.get('/api/admin/orders/pending-ids', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    // Lightweight endpoint for the native alert service. Never send the full
+    // order history during background polling.
+    const pendingIds = db.getAllOrders()
+      .filter((order: any) => {
+        const status = String(order.status || '').trim().toLowerCase();
+        return (
+          status === 'new' ||
+          status === 'pending' ||
+          status === 'pending confirmation' ||
+          status === 'order placed' ||
+          status === 'placed'
+        );
+      })
+      .map((order: any) => String(order.id || ''))
+      .filter(Boolean);
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.json(pendingIds);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/admin/orders/stream', (req: Request, res: Response) => {
   try {
     const token = String(req.query.token || '');
