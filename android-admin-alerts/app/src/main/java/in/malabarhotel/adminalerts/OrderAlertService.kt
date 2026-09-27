@@ -85,10 +85,8 @@ class OrderAlertService : Service() {
                     val currentPending = mutableSetOf<String>()
 
                     for (i in 0 until json.length()) {
-                        val order = json.getJSONObject(i)
-                        val id = order.optString("id")
-                        val status = order.optString("status").trim().lowercase()
-                        if (id.isNotBlank() && isPending(status)) currentPending.add(id)
+                        val id = json.optString(i)
+                        if (id.isNotBlank()) currentPending.add(id)
                     }
 
                     val previousPending = pendingIds
