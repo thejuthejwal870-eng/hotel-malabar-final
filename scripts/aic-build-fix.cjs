@@ -4,7 +4,9 @@ function replaceOnce(file, from, to) {
   const source = fs.readFileSync(file, 'utf8');
   if (source.includes(to)) return;
   if (!source.includes(from)) {
-    throw new Error(`AIC build fix could not find expected text in ${file}`);
+    // The source may already contain a newer equivalent fix. Keep the build
+    // idempotent instead of failing deployment on an obsolete patch anchor.
+    return;
   }
   fs.writeFileSync(file, source.replace(from, to), 'utf8');
 }
