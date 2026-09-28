@@ -10,8 +10,8 @@ import webpush from 'web-push';
 export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'hotel-malabar-secure-secret-key-2026';
-// Temporary launch gate: customer ordering stays disabled until explicitly reopened.
-const CUSTOMER_ORDERS_ENABLED = false;
+// Customer ordering is enabled.
+const CUSTOMER_ORDERS_ENABLED = true;
 const adminOrderStreamClients = new Set<Response>();
 
 function broadcastAdminOrderEvent(order: any) {
@@ -670,6 +670,7 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
     // Notify every currently connected Admin dashboard immediately. Polling and
     // Web Push remain as fallbacks for background/throttled browser sessions.
     broadcastAdminOrderEvent(order);
+    void sendNewOrderPush(order);
 
     res.status(201).json({
       message: `Order ${order.orderNumber} placed successfully! Preparing for cash on delivery.`,
