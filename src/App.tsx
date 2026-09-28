@@ -11,6 +11,38 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { User, CustomerProfile, MenuItem, MenuCategory, CartItem, DeliverySettings, DeliveryArea, Order, RestaurantProfile } from './types';
 import { AlertTriangle, Clock, ArrowRight, UtensilsCrossed } from 'lucide-react';
 
+
+
+const CUSTOMER_SITE_COMING_SOON = true;
+
+const CustomerComingSoon: React.FC<{ restaurantProfile: RestaurantProfile | null }> = ({ restaurantProfile }) => {
+  const restaurantName = restaurantProfile?.name || 'HOTEL MALABAR';
+  const logoUrl = restaurantProfile?.logoUrl;
+  const coverPhoto = restaurantProfile?.coverPhotoUrl || 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1600&q=90';
+  return (
+    <div className="min-h-screen bg-[#151210] text-[#f7f1e6] flex items-center justify-center px-5 py-10">
+      <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-[#8d6b35]/50 bg-[#211c16] shadow-2xl">
+        <div className="relative h-64 sm:h-80 overflow-hidden">
+          <img src={coverPhoto} alt={restaurantName} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#151210] via-[#151210]/45 to-transparent" />
+          <div className="absolute bottom-5 left-5 right-5 flex items-end gap-3">
+            <div className="w-14 h-14 rounded-2xl bg-[#f7f1e6] border border-[#e0b568] p-1.5 overflow-hidden shrink-0">
+              {logoUrl ? <img src={logoUrl} alt="" className="w-full h-full object-contain" /> : <UtensilsCrossed className="w-full h-full p-2 text-[#80602f]" />}
+            </div>
+            <div><div className="text-[10px] uppercase tracking-[0.3em] text-[#e0b568]">TASTE OF MALABAR</div><h1 className="font-brand text-2xl sm:text-3xl">{restaurantName}</h1></div>
+          </div>
+        </div>
+        <div className="px-6 py-9 sm:px-10 sm:py-11 text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#d8aa58]/50 bg-[#151210] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#e0b568]">Coming Soon</div>
+          <h2 className="font-brand text-3xl sm:text-4xl mt-5 text-[#f7f1e6]">We’re getting ready.</h2>
+          <p className="mt-3 text-sm leading-6 text-[#b9ad9d] max-w-md mx-auto">Our online ordering website is currently under preparation. Online orders will open soon.</p>
+          <div className="mt-7 flex items-center justify-center gap-2 text-xs text-[#e0b568]"><Clock className="w-4 h-4" /> Online ordering temporarily unavailable</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const isAdminPath = () => {
     if (typeof window === 'undefined') return false;
@@ -92,6 +124,7 @@ export default function App() {
   const filteredMostOrdered = useMemo(() => mostOrderedItems.filter(item => { if (selectedCategoryId !== 'all' && item.categoryId !== selectedCategoryId) return false; if (!searchQuery.trim()) return true; const q = searchQuery.toLowerCase(); return item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q); }), [mostOrderedItems, selectedCategoryId, searchQuery]);
 
   if (viewMode === 'admin') return <div className="admin-page-shell"><AdminDashboard onBackToCustomerSite={navigateToCustomer} /></div>;
+  if (CUSTOMER_SITE_COMING_SOON) return <CustomerComingSoon restaurantProfile={restaurantProfile} />;
   if (!customerUser) return <><CustomerFirstScreen restaurantProfile={restaurantProfile} onCreateAccount={() => { setAuthInitialMode('register'); setAuthModalOpen(true); }} onLogin={() => { setAuthInitialMode('login'); setAuthModalOpen(true); }} /><CustomerAuthModal isOpen={authModalOpen} initialMode={authInitialMode} restaurantProfile={restaurantProfile} onClose={() => setAuthModalOpen(false)} onAuthSuccess={handleAuthSuccess} /></>;
 
   const heroImage = restaurantProfile?.coverPhotoUrl || menuItems[0]?.imageUrl || 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1400&q=90';
