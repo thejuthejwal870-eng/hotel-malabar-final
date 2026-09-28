@@ -99,19 +99,21 @@ class OrderAlertService : Service() {
                     } else if (pendingIds.isEmpty()) {
                         // No unaccepted orders remain. This is the hard stop condition:
                         // accepted/rejected orders must silence the custom sound immediately.
-                        testPlayback = false
-                        stopAlertSound()
+                        if (!testPlayback) {
+                            stopAlertSound()
+                        }
                     } else {
                         val newlyArrived = (pendingIds - previousPending) - alertedOrderIds
                         if (newlyArrived.isNotEmpty()) {
                             alertedOrderIds.addAll(newlyArrived)
+                            // A real order always takes priority over a manual test sound.
+                            testPlayback = false
+                            stopAlertSound()
                             vibrate()
-                            if (mediaPlayer == null) {
-                                // A new pending order starts exactly one looping copy of
-                                // the uploaded custom sound. It is stopped by the pendingIds
-                                // empty condition above when the order is accepted/rejected.
-                                refreshAndPlayCustomSound()
-                            }
+                            // A new pending order starts exactly one looping copy of the
+                            // uploaded custom sound and remains active until all pending
+                            // orders are accepted/rejected.
+                            refreshAndPlayCustomSound()
                         }
                     }
                 } else if (response.code == 401 || response.code == 403) {
