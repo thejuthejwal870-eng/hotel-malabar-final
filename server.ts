@@ -10,6 +10,8 @@ import webpush from 'web-push';
 export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'hotel-malabar-secure-secret-key-2026';
+// Temporary launch gate: customer ordering stays disabled until explicitly reopened.
+const CUSTOMER_ORDERS_ENABLED = false;
 const adminOrderStreamClients = new Set<Response>();
 
 function broadcastAdminOrderEvent(order: any) {
@@ -595,6 +597,9 @@ app.delete('/api/admin/push/subscribe', requireAdminAuth, async (req: Request, r
 
 app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    if (!CUSTOMER_ORDERS_ENABLED) {
+      return res.status(503).json({ error: 'Online ordering is temporarily unavailable. Hotel Malabar is coming soon.' });
+    }
     const {
       deliveryAddress,
       deliveryArea,
