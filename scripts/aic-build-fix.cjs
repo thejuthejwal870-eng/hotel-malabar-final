@@ -10,16 +10,24 @@ function replaceOnce(file, from, to) {
 }
 
 // Keep the deployed admin API compatible with the current database method.
-replaceOnce(
-  'server.ts',
-  "const admin = db.setupInitialAdmin({ phone: adminPhone, password: adminPassword });",
-  "const admin = db.initialSetupAdmin(adminPhone, adminPassword);"
-);
-replaceOnce(
-  'server.ts',
-  "if (adminPassword.length < 6) {\n      return res.status(400).json({ error: 'Admin password must be at least 6 characters.' });\n    }",
-  "if (adminPassword.length < 8) {\n      return res.status(400).json({ error: 'Admin password must be at least 8 characters.' });\n    }"
-);
+// These fixes are intentionally idempotent because the source tree may already
+// contain the corrected implementation before the AIC build script runs.
+const serverAuthSource = fs.readFileSync('server.ts', 'utf8');
+if (serverAuthSource.includes("const admin = db.setupInitialAdmin({ phone: adminPhone, password: adminPassword });")) {
+  replaceOnce(
+    'server.ts',
+    "const admin = db.setupInitialAdmin({ phone: adminPhone, password: adminPassword });",
+    "const admin = db.initialSetupAdmin(adminPhone, adminPassword);"
+  );
+}
+const serverPasswordSource = fs.readFileSync('server.ts', 'utf8');
+if (serverPasswordSource.includes("if (adminPassword.length < 6) {")) {
+  replaceOnce(
+    'server.ts',
+    "if (adminPassword.length < 6) {\n      return res.status(400).json({ error: 'Admin password must be at least 6 characters.' });\n    }",
+    "if (adminPassword.length < 8) {\n      return res.status(400).json({ error: 'Admin password must be at least 8 characters.' });\n    }"
+  );
+}
 
 // Remove the old hardcoded admin auto-login. Use only the real login flow.
 const adminFile = 'src/components/AdminDashboard.tsx';
