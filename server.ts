@@ -592,6 +592,117 @@ app.delete('/api/admin/push/subscribe', requireAdminAuth, async (req: Request, r
 });
 
 // ==========================================
+// CASHFREE ONLINE PAYMENTS
+// ==========================================
+
+const CASHFREE_API_VERSION = '2025-01-01';
+const CASHFREE_BASE_URL =
+  String(process.env.CASHFREE_ENVIRONMENT || '').toLowerCase() === 'sandbox'
+    ? 'https://sandbox.cashfree.com'
+    : 'https://api.cashfree.com';
+
+function requireCashfreeCredentials() {
+  const appId = String(process.env.CASHFREE_APP_ID || '').trim();
+  const secretKey = String(process.env.CASHFREE_SECRET_KEY || '').trim();
+  if (!appId || !secretKey) {
+    throw new Error('Cashfree payment gateway is not configured on the server.');
+  }
+  return { appId, secretKey };
+}
+
+async function cashfreeRequest(pathname: string, init: RequestInit = {}) {
+  const { appId, secretKey } = requireCashfreeCredentials();
+  const response = await fetch(CASHFREE_BASE_URL + pathname, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'x-api-version': CASHFREE_API_VERSION,
+      'x-client-id': appId,
+      'x-client-secret': secretKey,
+      ...(init.headers || {}),
+    },
+  });
+  const text = await response.text();
+  let body: any = {};
+  try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text }; }
+  if (!response.ok) {
+    const detail = body?.message || body?.error_description || body?.error || 'Cashfree API request failed.';
+    throw new Error(detail);
+  }
+  return body;
+}
+
+app.post('/api/payments/cashfree/create-order', requireCustomerAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const amount = Number(req.body?.amount);
+    if (!Number.isFinite(amount) || amount < 1) {
+      return res.status(400).json({ error: 'Invalid payment amount.' });
+    }
+
+    const user = db.findUserById(req.user!.id);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    const origin = String(process.env.APP_URL || '').trim() ||
+      \`https://\${String(req.get('host') || '').trim()}\`;
+    const orderId = \`HM_PAY_\${Date.now()}_\${Math.random().toString(36).slice(2, 8)}\`;
+
+    const result = await cashfreeRequest('/pg/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        order_amount: Number(amount.toFixed(2)),
+        order_currency: 'INR',
+        order_id: orderId,
+        customer_details: {
+          customer_id: user.id,
+          customer_name: \`\${user.firstName} \${user.lastName}\`.trim(),
+          customer_phone: user.phone,
+        },
+        order_meta: {
+          return_url: \`\${origin}/?cashfree_return=1&order_id={order_id}\`,
+        },
+        order_note: 'Hotel Malabar food order',
+      }),
+    });
+
+    res.json({
+      success: true,
+      orderId,
+      paymentSessionId: result.payment_session_id,
+      orderAmount: result.order_amount,
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Could not create Cashfree payment order.' });
+  }
+});
+
+// Customer-facing verification endpoint. The server verifies payment status with Cashfree.
+app.get('/api/payments/cashfree/:orderId/status', requireCustomerAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orderId = String(req.params.orderId || '').trim();
+    if (!orderId) return res.status(400).json({ error: 'Cashfree order ID is required.' });
+
+    const [order, payments] = await Promise.all([
+      cashfreeRequest(\`/pg/orders/\${encodeURIComponent(orderId)}\`),
+      cashfreeRequest(\`/pg/orders/\${encodeURIComponent(orderId)}/payments\`),
+    ]);
+    const successPayment = Array.isArray(payments)
+      ? payments.find((p: any) => String(p.payment_status || '').toUpperCase() === 'SUCCESS')
+      : null;
+
+    res.json({
+      orderId,
+      orderStatus: order?.order_status || null,
+      orderAmount: Number(order?.order_amount || 0),
+      paymentStatus: successPayment ? 'SUCCESS' : (Array.isArray(payments) && payments.some((p: any) => String(p.payment_status || '').toUpperCase() === 'PENDING') ? 'PENDING' : 'FAILED'),
+      transactionId: successPayment?.cf_payment_id || null,
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Unable to verify Cashfree payment.' });
+  }
+});
+
+// ==========================================
 // CUSTOMER ORDERS
 // ==========================================
 
@@ -607,6 +718,7 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
       specialInstructions,
       customerLatitude,
       customerLongitude,
+      cashfreeOrderId,
     } = req.body;
     const user = db.findUserById(req.user!.id);
 
@@ -642,6 +754,27 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
       lng = customerLongitude;
     }
 
+    // New Hotel Malabar orders are online-payment only.
+    if (!cashfreeOrderId || typeof cashfreeOrderId !== 'string') {
+      return res.status(402).json({ error: 'Online payment is required. Please complete payment through Cashfree.' });
+    }
+
+    const [cfOrder, cfPayments] = await Promise.all([
+      cashfreeRequest(\`/pg/orders/\${encodeURIComponent(cashfreeOrderId)}\`),
+      cashfreeRequest(\`/pg/orders/\${encodeURIComponent(cashfreeOrderId)}/payments\`),
+    ]);
+    const successfulPayment = Array.isArray(cfPayments)
+      ? cfPayments.find((p: any) => String(p.payment_status || '').toUpperCase() === 'SUCCESS')
+      : null;
+    if (!successfulPayment) {
+      return res.status(402).json({ error: 'Payment was not successful. The order was not placed.' });
+    }
+
+    const paidAmount = Number(cfOrder?.order_amount || 0);
+    if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+      return res.status(402).json({ error: 'Cashfree payment amount could not be verified.' });
+    }
+
     // Refresh the shared cloud snapshot before creating an order so one server
     // instance cannot overwrite a newer order from another instance.
     await syncFromSupabase();
@@ -657,6 +790,10 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
       specialInstructions,
       customerLatitude: lat,
       customerLongitude: lng,
+      paymentMethod: 'Cashfree Online Payment',
+      cashfreeOrderId,
+      paymentStatus: 'SUCCESS',
+      expectedPaymentAmount: paidAmount,
     });
 
     // Persist the new order to the cloud before responding to the customer.
