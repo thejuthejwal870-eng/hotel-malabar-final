@@ -6,6 +6,7 @@ import { db } from './server/db.ts';
 import { syncFromSupabase, syncToSupabase } from './server/supabase-sync.ts';
 import { extractMenuItemsFromPhotos } from './server/gemini.ts';
 import webpush from 'web-push';
+import { hasPostgresConfig, syncFromPostgres, syncToPostgres } from './server/postgres-sync.ts';
 
 export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -1515,6 +1516,17 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 // Vite Middleware for SPA & standalone server startup
 export async function startServer() {
+  if (hasPostgresConfig()) {
+    const remoteData = await syncFromPostgres();
+    if (remoteData) {
+      db.replaceData(remoteData);
+      console.log('Hotel Malabar database loaded from AIC PostgreSQL.');
+    } else {
+      await syncToPostgres(db.getDataSnapshot());
+      console.log('Hotel Malabar local database initialized in AIC PostgreSQL.');
+    }
+  }
+
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
