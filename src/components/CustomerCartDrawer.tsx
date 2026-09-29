@@ -18,6 +18,12 @@ import {
 } from 'lucide-react';
 import { CartItem, DeliveryArea, DeliverySettings, User, CustomerProfile, Order } from '../types';
 
+declare global {
+  interface Window {
+    Cashfree?: (options: { mode: 'sandbox' | 'production' }) => any;
+  }
+}
+
 interface CustomerCartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -126,6 +132,55 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
     );
   };
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const returnedOrderId = params.get('order_id');
+    const isCashfreeReturn = params.get('cashfree_return') === '1';
+    if (!returnedOrderId || !isCashfreeReturn) return;
+
+    const pendingRaw = sessionStorage.getItem('hm_cashfree_pending_order');
+    if (!pendingRaw) return;
+
+    let pendingPayload: any;
+    try {
+      pendingPayload = JSON.parse(pendingRaw);
+    } catch {
+      sessionStorage.removeItem('hm_cashfree_pending_order');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    fetch('/api/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('hm_customer_token') || ''}`,
+      },
+      body: JSON.stringify({
+        ...pendingPayload,
+        cashfreeOrderId: returnedOrderId,
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Payment verification failed.');
+        sessionStorage.removeItem('hm_cashfree_pending_order');
+        window.history.replaceState({}, '', window.location.pathname);
+        onClearCart();
+        setShowConfirmModal(false);
+        onClose();
+        onOrderPlaced(data.order);
+      })
+      .catch((err: any) => {
+        setError(err?.message || 'Payment was not completed. No order was placed.');
+        sessionStorage.removeItem('hm_cashfree_pending_order');
+        window.history.replaceState({}, '', window.location.pathname);
+      })
+      .finally(() => setIsSubmitting(false));
+  }, [onClearCart, onClose, onOrderPlaced]);
+
   if (!isOpen) return null;
 
   // Selected area calculation
@@ -191,12 +246,32 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
     setShowConfirmModal(true);
   };
 
+  const loadCashfreeSdk = async () => {
+    if (window.Cashfree) return;
+    await new Promise<void>((resolve, reject) => {
+      const existing = document.querySelector('script[src="https://sdk.cashfree.com/js/v3/cashfree.js"]') as HTMLScriptElement | null;
+      if (existing) {
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', () => reject(new Error('Cashfree checkout could not be loaded.')), { once: true });
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Cashfree checkout could not be loaded.'));
+      document.head.appendChild(script);
+    });
+  };
+
   const handlePlaceOrder = async () => {
     setIsSubmitting(true);
     setError(null);
 
     try {
       const token = localStorage.getItem('hm_customer_token');
+      if (!token) throw new Error('Please login again before payment.');
+
       const payload = {
         deliveryAddress: address.trim(),
         deliveryArea: selectedAreaName,
@@ -209,27 +284,41 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
         customerLongitude: gpsCoords?.longitude,
       };
 
-      const res = await fetch('/api/orders', {
+      // Keep the exact checkout payload so the order can be finalized after Cashfree redirects back.
+      sessionStorage.setItem('hm_cashfree_pending_order', JSON.stringify(payload));
+
+      const createRes = await fetch('/api/payments/cashfree/create-order', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ amount: grandTotal }),
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to place order.');
+      const createData = await createRes.json();
+      if (!createRes.ok || !createData.paymentSessionId) {
+        throw new Error(createData.error || 'Could not start Cashfree payment.');
       }
 
-      onClearCart();
-      setShowConfirmModal(false);
-      onClose();
-      onOrderPlaced(data.order);
+      await loadCashfreeSdk();
+      if (!window.Cashfree) throw new Error('Cashfree checkout is unavailable.');
+
+      const mode = 'production';
+      const cashfree = window.Cashfree({ mode });
+      const result = await cashfree.checkout({
+        paymentSessionId: createData.paymentSessionId,
+        redirectTarget: '_self',
+      });
+
+      // Cashfree normally redirects to the configured return URL. This is only
+      // a fallback for SDK errors where the redirect did not happen.
+      if (result?.error) {
+        sessionStorage.removeItem('hm_cashfree_pending_order');
+        throw new Error(result.error.message || 'Cashfree payment could not be started.');
+      }
     } catch (err: any) {
-      setError(err.message || 'Could not place order.');
-      setShowConfirmModal(false);
+      setError(err?.message || 'Could not start payment.');
+      sessionStorage.removeItem('hm_cashfree_pending_order');
     } finally {
       setIsSubmitting(false);
     }
@@ -613,17 +702,17 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                 </div>
               )}
 
-              {/* CASH ON DELIVERY ONLY BADGE */}
+              {/* CASHFREE ONLINE PAYMENT ONLY */}
               <div className="p-3.5 bg-gradient-to-r from-[#2a2118] to-[#4f3d25] border-2 border-[#e0b568]/60 rounded-xl flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-[#e0b568] text-[#18130e] flex items-center justify-center shrink-0">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="text-xs font-bold text-[#e0b568] uppercase tracking-wider">
-                    Payment Method: Cash on Delivery Only
+                    Payment Method: Cashfree Online Payment
                   </div>
                   <div className="text-[11px] text-[#ddd4c7]">
-                    Pay cash directly to the delivery personnel upon food arrival. No online prepayment required.
+                    Secure online payment through Cashfree. UPI, cards and other methods shown by Cashfree are available at checkout.
                   </div>
                 </div>
               </div>
@@ -668,7 +757,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                 <span className="font-brand text-xl font-bold text-[#f7f1e6] block">
                   Confirm Hotel Malabar Order
                 </span>
-                <span className="text-xs text-[#e0b568]">Cash on Delivery</span>
+                <span className="text-xs text-[#e0b568]">Cashfree Online Payment</span>
               </div>
 
               <div className="text-xs space-y-2 bg-[#17130f] p-3 rounded-xl border border-[#5b4728]">
@@ -742,7 +831,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                   </span>
                 </div>
                 <div className="flex justify-between text-base font-bold text-[#e0b568] pt-1 border-t border-[#5b4728]">
-                  <span>Grand Total (COD):</span>
+                  <span>Grand Total:</span>
                   <span className="font-mono">₹{grandTotal}</span>
                 </div>
               </div>
@@ -763,7 +852,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
                   onClick={handlePlaceOrder}
                   className="flex-1 bg-gradient-to-r from-[#e0b568] to-[#b98b43] text-[#18130e] font-bold py-3 rounded-xl text-xs shadow hover:from-[#e8c560] cursor-pointer disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Submitting Order...' : 'Confirm Order (COD)'}
+                  {isSubmitting ? 'Opening Cashfree...' : 'Pay Securely with Cashfree'}
                 </button>
               </div>
             </div>
