@@ -303,7 +303,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = memo(({
       await loadCashfreeSdk();
       if (!window.Cashfree) throw new Error('Cashfree checkout is unavailable.');
 
-      const mode = 'production';
+      const mode = createData.environment === 'sandbox' ? 'sandbox' : 'production';
       const cashfree = window.Cashfree({ mode });
       const result = await cashfree.checkout({
         paymentSessionId: createData.paymentSessionId,
