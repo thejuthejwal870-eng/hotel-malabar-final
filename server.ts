@@ -1522,8 +1522,16 @@ export async function startServer() {
       db.replaceData(remoteData);
       console.log('Hotel Malabar database loaded from AIC PostgreSQL.');
     } else {
-      await syncToPostgres(db.getDataSnapshot());
-      console.log('Hotel Malabar local database initialized in AIC PostgreSQL.');
+      // Prefer migrating the existing Supabase dataset when it is still reachable.
+      const migrated = await syncFromSupabase();
+      if (migrated) {
+        db.reloadFromDisk();
+        await syncToPostgres(db.getDataSnapshot());
+        console.log('Hotel Malabar data migrated from Supabase to AIC PostgreSQL.');
+      } else {
+        await syncToPostgres(db.getDataSnapshot());
+        console.log('Hotel Malabar local database initialized in AIC PostgreSQL.');
+      }
     }
   }
 
