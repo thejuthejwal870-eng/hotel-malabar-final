@@ -8,6 +8,23 @@ import { extractMenuItemsFromPhotos } from './server/gemini.ts';
 import webpush from 'web-push';
 import { hasPostgresConfig, syncFromPostgres, syncToPostgres } from './server/postgres-sync.ts';
 
+async function refreshPrimaryData(): Promise<boolean> {
+  // PostgreSQL is the preferred runtime database. Supabase is used only for
+  // one-time migration during startup, not on customer/admin requests.
+  if (!hasPostgresConfig()) return false;
+  const remoteData = await syncFromPostgres();
+  if (!remoteData) return false;
+  db.replaceData(remoteData);
+  return true;
+}
+
+async function persistPrimaryData(): Promise<boolean> {
+  // When PostgreSQL is not configured, the local database remains the active
+  // runtime store. This is important while Supabase is under a 402 restriction.
+  if (!hasPostgresConfig()) return true;
+  return syncToPostgres(db.getDataSnapshot());
+}
+
 export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'hotel-malabar-secure-secret-key-2026';
@@ -42,7 +59,7 @@ async function getVapidConfig() {
   // Generate once and persist the VAPID pair in the server database so
   // deployments/restarts keep the same key pair and existing subscriptions
   // remain valid. The private key never leaves the server.
-  await syncFromSupabase();
+  await refreshPrimaryData();
   db.reloadFromDisk();
 
   const stored = db.getVapidConfig();
@@ -58,7 +75,7 @@ async function getVapidConfig() {
   };
 
   db.setVapidConfig(config);
-  await syncToSupabase();
+  await persistPrimaryData();
   return config;
 }
 
@@ -67,7 +84,7 @@ const pendingAlertLastSent = new Map<string, number>();
 async function sendPendingOrderAlerts(): Promise<void> {
   try {
     const vapid = await getVapidConfig();
-    await syncFromSupabase();
+    await refreshPrimaryData();
     db.reloadFromDisk();
     const subscriptions = db.getPushSubscriptions();
     if (!subscriptions.length) return;
@@ -121,7 +138,7 @@ function isOrderTodayServer(value: string): boolean {
 async function sendOrderStatusPush(order: any): Promise<void> {
   try {
     const vapid = await getVapidConfig();
-    await syncFromSupabase();
+    await refreshPrimaryData();
     db.reloadFromDisk();
     const subscriptions = db.getPushSubscriptions();
     if (!subscriptions.length) return;
@@ -154,7 +171,7 @@ async function sendOrderStatusPush(order: any): Promise<void> {
 async function sendNewOrderPush(order: any): Promise<void> {
   try {
     const vapid = await getVapidConfig();
-    await syncFromSupabase();
+    await refreshPrimaryData();
     db.reloadFromDisk();
     const subscriptions = db.getPushSubscriptions();
     if (!subscriptions.length) return;
@@ -181,7 +198,7 @@ async function sendNewOrderPush(order: any): Promise<void> {
           const statusCode = Number(err?.statusCode || 0);
           if (statusCode === 404 || statusCode === 410) {
             db.removePushSubscription(subscription.endpoint);
-            await syncToSupabase();
+            await persistPrimaryData();
           } else {
             console.warn('Web Push delivery failed:', statusCode || err?.message || err);
           }
@@ -481,7 +498,7 @@ app.get('/api/admin/sound-settings', async (req: Request, res: Response) => {
   try {
     // Always refresh from the shared cloud database so the native Android
     // admin app can read the uploaded custom sound from a fresh instance.
-    await syncFromSupabase();
+    await refreshPrimaryData();
     db.reloadFromDisk();
     const notificationSound = db.getNotificationSound();
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -501,7 +518,7 @@ app.post('/api/admin/sound-settings', requireAdminAuth, async (req: Request, res
     });
     // Keep the alert sound in cloud storage so native admin devices can
     // continue using the same sound after a server restart/redeploy.
-    const cloudSaved = await syncToSupabase();
+    const cloudSaved = await persistPrimaryData();
     if (!cloudSaved) {
       return res.status(503).json({ error: 'Alert sound could not be saved to the cloud. Please try again.' });
     }
@@ -569,7 +586,7 @@ app.post('/api/admin/push/subscribe', requireAdminAuth, async (req: Request, res
       updatedAt: new Date().toISOString(),
     });
 
-    const saved = await syncToSupabase();
+    const saved = await persistPrimaryData();
     if (!saved) {
       return res.status(503).json({ error: 'Push subscription could not be saved to the cloud.' });
     }
@@ -585,7 +602,7 @@ app.delete('/api/admin/push/subscribe', requireAdminAuth, async (req: Request, r
     const endpoint = String(req.body?.endpoint || '').trim();
     if (!endpoint) return res.status(400).json({ error: 'Push endpoint is required.' });
     db.removePushSubscription(endpoint);
-    await syncToSupabase();
+    await persistPrimaryData();
     res.json({ success: true });
   } catch (err: any) {
     res.status(400).json({ error: err?.message || 'Failed to remove push subscription.' });
@@ -761,7 +778,7 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
       return res.status(402).json({ error: 'Online payment is required. Please complete payment through Cashfree.' });
     }
 
-    await syncFromSupabase();
+    await refreshPrimaryData();
     db.reloadFromDisk();
 
     const alreadyUsed = db.getAllOrders().some(
@@ -815,7 +832,7 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
     });
 
     // Persist the new order to the cloud before responding to the customer.
-    const cloudSaved = await syncToSupabase();
+    const cloudSaved = await persistPrimaryData();
     if (!cloudSaved) {
       return res.status(503).json({ error: 'Order could not be saved to the cloud. Please try again.' });
     }
@@ -838,7 +855,7 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
 
 app.get('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    await syncFromSupabase();
+    await refreshPrimaryData();
     db.reloadFromDisk();
     const orders = db.getCustomerOrders(req.user!.id);
     res.json(orders);
@@ -1051,7 +1068,7 @@ app.get('/api/admin/orders', requireAdminAuth, async (req: Request, res: Respons
     // read the live local database immediately so a new order is never delayed
     // behind a Supabase round-trip or overwritten by an older cloud snapshot.
     if (String(req.query.sync || '') === '1') {
-      await syncFromSupabase();
+      await refreshPrimaryData();
       db.reloadFromDisk();
     }
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -1198,7 +1215,7 @@ app.put('/api/admin/orders/:orderId/status', requireAdminAuth, async (req: Reque
     // Finish the cloud write BEFORE responding. The native alert service polls
     // the cloud snapshot, so this prevents a stale PENDING status from briefly
     // bringing the alert back after ACCEPTED/REJECTED.
-    const cloudSaved = await syncToSupabase();
+    const cloudSaved = await persistPrimaryData();
     if (!cloudSaved) {
       return res.status(503).json({ error: 'Order status could not be synchronized to the cloud. Please try again.' });
     }
@@ -1368,7 +1385,7 @@ app.post('/api/admin/menu/categories/:id/move', requireAdminAuth, (req: Request,
 app.put('/api/admin/profile', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const updated = db.updateRestaurantProfile(req.body);
-    const cloudSaved = await syncToSupabase();
+    const cloudSaved = await persistPrimaryData();
     if (!cloudSaved) {
       return res.status(503).json({ error: 'Hotel profile could not be saved to the cloud. Please try again.' });
     }
