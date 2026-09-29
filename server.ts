@@ -670,6 +670,7 @@ app.post('/api/payments/cashfree/create-order', requireCustomerAuth, async (req:
       orderId,
       paymentSessionId: result.payment_session_id,
       orderAmount: result.order_amount,
+      environment: CASHFREE_BASE_URL.includes('sandbox') ? 'sandbox' : 'production',
     });
   } catch (err: any) {
     res.status(400).json({ error: err?.message || 'Could not create Cashfree payment order.' });
@@ -759,6 +760,16 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
       return res.status(402).json({ error: 'Online payment is required. Please complete payment through Cashfree.' });
     }
 
+    await syncFromSupabase();
+    db.reloadFromDisk();
+
+    const alreadyUsed = db.getAllOrders().some(
+      (order: any) => String(order.cashfreeOrderId || '') === cashfreeOrderId
+    );
+    if (alreadyUsed) {
+      return res.status(409).json({ error: 'This Cashfree payment has already been used for an order.' });
+    }
+
     const [cfOrder, cfPayments] = await Promise.all([
       cashfreeRequest(`/pg/orders/${encodeURIComponent(cashfreeOrderId)}`),
       cashfreeRequest(`/pg/orders/${encodeURIComponent(cashfreeOrderId)}/payments`),
@@ -775,11 +786,17 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
       return res.status(402).json({ error: 'Cashfree payment amount could not be verified.' });
     }
 
+    const cfCustomerId = String(cfOrder?.customer_details?.customer_id || '').trim();
+    const cfCustomerPhone = String(cfOrder?.customer_details?.customer_phone || '').trim();
+    if (
+      (cfCustomerId && cfCustomerId !== String(user.id)) ||
+      (!cfCustomerId && cfCustomerPhone && cfCustomerPhone !== String(user.phone))
+    ) {
+      return res.status(403).json({ error: 'This Cashfree payment does not belong to the signed-in customer.' });
+    }
+
     // Refresh the shared cloud snapshot before creating an order so one server
     // instance cannot overwrite a newer order from another instance.
-    await syncFromSupabase();
-    db.reloadFromDisk();
-
     const order = db.createOrder({
       customerId: user.id,
       customerName: `${user.firstName} ${user.lastName}`.trim(),
@@ -810,7 +827,7 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
     void sendNewOrderPush(order);
 
     res.status(201).json({
-      message: `Order ${order.orderNumber} placed successfully! Preparing for cash on delivery.`,
+      message: `Payment successful. Order ${order.orderNumber} placed successfully!`,
       order,
     });
   } catch (err: any) {
