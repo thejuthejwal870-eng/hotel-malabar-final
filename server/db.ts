@@ -1215,7 +1215,7 @@ class CentralDatabase {
 
     const deliverySettings: DeliverySettingsRecord = {
       freeDeliveryKm: 2.0,
-      perKmCharge: 50,
+      perKmCharge: 25,
       minOrderAmount: 200,
       isRestaurantOpen: true,
       defaultPrepTimeMinutes: 10,
