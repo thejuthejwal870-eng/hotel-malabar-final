@@ -331,6 +331,10 @@ class CentralDatabase {
     void syncToPostgres(this.data);
   }
 
+  public getDataSnapshot(): DatabaseData {
+    return JSON.parse(JSON.stringify(this.data)) as DatabaseData;
+  }
+
   public replaceData(data: DatabaseData): void {
     if (!data || !Array.isArray(data.users) || !Array.isArray(data.orders)) return;
     this.data = data;
