@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
+import { syncToPostgres } from './postgres-sync.ts';
 
 export interface UserRecord {
   id: string;
@@ -324,6 +325,15 @@ class CentralDatabase {
   }
 
   private persist() {
+    this.version++;
+    this.menuCache = null;
+    this.saveData(this.data);
+    void syncToPostgres(this.data);
+  }
+
+  public replaceData(data: DatabaseData): void {
+    if (!data || !Array.isArray(data.users) || !Array.isArray(data.orders)) return;
+    this.data = data;
     this.version++;
     this.menuCache = null;
     this.saveData(this.data);
