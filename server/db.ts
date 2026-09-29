@@ -76,7 +76,9 @@ export interface OrderRecord {
   foodTotal: number;
   deliveryCharge: number;
   grandTotal: number;
-  paymentMethod: 'Cash on Delivery';
+  paymentMethod: 'Cash on Delivery' | 'Cashfree Online Payment';
+  cashfreeOrderId?: string;
+  paymentStatus?: string;
   status:
     | 'NEW'
     | 'Order Placed'
@@ -1760,6 +1762,10 @@ class CentralDatabase {
     specialInstructions?: string;
     customerLatitude?: number;
     customerLongitude?: number;
+    paymentMethod?: 'Cash on Delivery' | 'Cashfree Online Payment';
+    cashfreeOrderId?: string;
+    paymentStatus?: string;
+    expectedPaymentAmount?: number;
   }): OrderRecord {
     const settings = this.getDeliverySettings();
     if (!settings.isRestaurantOpen) {
@@ -1813,6 +1819,13 @@ class CentralDatabase {
     const deliveryCharge = calculateDeliveryFee(area.distanceKm, settings);
     const grandTotal = foodTotal + deliveryCharge;
 
+    if (data.paymentMethod === 'Cashfree Online Payment') {
+      if (!data.cashfreeOrderId) throw new Error('Cashfree payment reference is required.');
+      if (typeof data.expectedPaymentAmount !== 'number' || Math.abs(data.expectedPaymentAmount - grandTotal) > 0.01) {
+        throw new Error('Paid amount does not match the current order total. Please restart checkout.');
+      }
+    }
+
     // Ensure order sequence is strictly monotonic and higher than any existing order sequence
     const maxExistingSeq = (this.data.orders || []).reduce((max, o) => {
       const match = (o.orderNumber || '').match(/#HM(\d+)/i);
@@ -1844,7 +1857,9 @@ class CentralDatabase {
       foodTotal,
       deliveryCharge,
       grandTotal,
-      paymentMethod: 'Cash on Delivery',
+      paymentMethod: data.paymentMethod || 'Cash on Delivery',
+      cashfreeOrderId: data.cashfreeOrderId,
+      paymentStatus: data.paymentStatus,
       status: 'Order Placed',
       estimatedPrepTimeMinutes: settings.defaultPrepTimeMinutes,
       specialInstructions: data.specialInstructions,
