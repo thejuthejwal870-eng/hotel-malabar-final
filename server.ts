@@ -1478,7 +1478,7 @@ app.get('/api/admin/kot/:orderId', requireAdminAuth, (req: Request, res: Respons
     lines.push(`DELIVERY CHARGE: Rs. ${order.deliveryCharge}`);
     lines.push(`GRAND TOTAL    : Rs. ${order.grandTotal}`);
     lines.push(divider);
-    lines.push('PAYMENT: CASH ON DELIVERY ONLY');
+    lines.push('PAYMENT: CASHFREE ONLINE PAYMENT');
     lines.push(`STATUS : ${order.status.toUpperCase()}`);
     lines.push(`EST PREP TIME: ${order.estimatedPrepTimeMinutes} MINS`);
     lines.push(divider);
