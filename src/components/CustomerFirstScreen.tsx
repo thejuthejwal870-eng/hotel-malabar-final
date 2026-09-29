@@ -36,7 +36,7 @@ export const CustomerFirstScreen: React.FC<CustomerFirstScreenProps> = ({ restau
           <div className="flex items-center gap-2 text-[#d8d0c2]">
             <span className={`w-2 h-2 rounded-full ${isOnlineOpen ? 'bg-amber-400 animate-pulse' : 'bg-red-400'}`} />
             <span className="font-bold text-[#e2b866]">{isOnlineOpen ? 'Orders Open' : 'Orders Closed'}</span>
-            <span className="text-[#6f6559]">•</span><span>Cash on Delivery Only</span>
+            <span className="text-[#6f6559]">•</span><span>Online Payment via Cashfree</span>
           </div>
           <a href={`tel:${phone1}`} className="hidden sm:block text-[#d8d0c2] hover:text-[#e2b866]">{phone1}</a>
         </div>
@@ -130,7 +130,7 @@ export const CustomerFirstScreen: React.FC<CustomerFirstScreenProps> = ({ restau
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="text-center sm:text-left"><div className="font-brand text-base text-[#e0b568]">{restaurantName}</div><div className="text-[9px] uppercase tracking-[0.2em] mt-1">TASTE OF MALABAR</div></div>
           <div className="flex gap-4 text-[10px]"><a href="/" className="hover:text-[#e0b568]">Home</a><a href="/menu.html" className="hover:text-[#e0b568]">Menu</a><a href="/about.html" className="hover:text-[#e0b568]">About</a><a href="/contact.html" className="hover:text-[#e0b568]">Contact</a></div>
-          <div className="text-[9px]">Cash on Delivery • First 2 km Free</div>
+          <div className="text-[9px]">Online Payment via Cashfree • First 2 km Free</div>
         </div>
       </footer>
     </div>
