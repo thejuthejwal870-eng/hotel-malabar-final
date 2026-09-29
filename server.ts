@@ -644,8 +644,8 @@ app.post('/api/payments/cashfree/create-order', requireCustomerAuth, async (req:
     if (!user) return res.status(404).json({ error: 'User not found.' });
 
     const origin = String(process.env.APP_URL || '').trim() ||
-      \`https://\${String(req.get('host') || '').trim()}\`;
-    const orderId = \`HM_PAY_\${Date.now()}_\${Math.random().toString(36).slice(2, 8)}\`;
+      `https://${String(req.get('host') || '').trim()}`;
+    const orderId = `HM_PAY_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     const result = await cashfreeRequest('/pg/orders', {
       method: 'POST',
@@ -655,11 +655,11 @@ app.post('/api/payments/cashfree/create-order', requireCustomerAuth, async (req:
         order_id: orderId,
         customer_details: {
           customer_id: user.id,
-          customer_name: \`\${user.firstName} \${user.lastName}\`.trim(),
+          customer_name: `${user.firstName} ${user.lastName}`.trim(),
           customer_phone: user.phone,
         },
         order_meta: {
-          return_url: \`\${origin}/?cashfree_return=1&order_id={order_id}\`,
+          return_url: `${origin}/?cashfree_return=1&order_id={order_id}`,
         },
         order_note: 'Hotel Malabar food order',
       }),
@@ -683,8 +683,8 @@ app.get('/api/payments/cashfree/:orderId/status', requireCustomerAuth, async (re
     if (!orderId) return res.status(400).json({ error: 'Cashfree order ID is required.' });
 
     const [order, payments] = await Promise.all([
-      cashfreeRequest(\`/pg/orders/\${encodeURIComponent(orderId)}\`),
-      cashfreeRequest(\`/pg/orders/\${encodeURIComponent(orderId)}/payments\`),
+      cashfreeRequest(`/pg/orders/${encodeURIComponent(orderId)}`),
+      cashfreeRequest(`/pg/orders/${encodeURIComponent(orderId)}/payments`),
     ]);
     const successPayment = Array.isArray(payments)
       ? payments.find((p: any) => String(p.payment_status || '').toUpperCase() === 'SUCCESS')
@@ -760,8 +760,8 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
     }
 
     const [cfOrder, cfPayments] = await Promise.all([
-      cashfreeRequest(\`/pg/orders/\${encodeURIComponent(cashfreeOrderId)}\`),
-      cashfreeRequest(\`/pg/orders/\${encodeURIComponent(cashfreeOrderId)}/payments\`),
+      cashfreeRequest(`/pg/orders/${encodeURIComponent(cashfreeOrderId)}`),
+      cashfreeRequest(`/pg/orders/${encodeURIComponent(cashfreeOrderId)}/payments`),
     ]);
     const successfulPayment = Array.isArray(cfPayments)
       ? cfPayments.find((p: any) => String(p.payment_status || '').toUpperCase() === 'SUCCESS')
