@@ -210,6 +210,104 @@ async function sendNewOrderPush(order: any): Promise<void> {
   }
 }
 
+
+/**
+ * Send a new-order notification to the Hotel Malabar admin WhatsApp number.
+ * Credentials are read only from server environment variables; never from the browser.
+ *
+ * Required:
+ * - WHATSAPP_ACCESS_TOKEN
+ * - WHATSAPP_PHONE_NUMBER_ID
+ * - WHATSAPP_ADMIN_TO (E.164, e.g. 9198XXXXXXXX)
+ *
+ * For business-initiated notifications, configure an approved WhatsApp template:
+ * - WHATSAPP_ORDER_TEMPLATE_NAME
+ * - WHATSAPP_ORDER_TEMPLATE_LANG (default: en_US)
+ * If no template is configured, a plain text message is attempted (works when
+ * the recipient is inside an allowed WhatsApp customer-service window).
+ */
+async function sendNewOrderWhatsApp(order: any): Promise<void> {
+  const accessToken = String(process.env.WHATSAPP_ACCESS_TOKEN || '').trim();
+  const phoneNumberId = String(process.env.WHATSAPP_PHONE_NUMBER_ID || '').trim();
+  const adminTo = String(process.env.WHATSAPP_ADMIN_TO || '').replace(/\\D/g, '');
+  const templateName = String(process.env.WHATSAPP_ORDER_TEMPLATE_NAME || '').trim();
+  const templateLanguage = String(process.env.WHATSAPP_ORDER_TEMPLATE_LANG || 'en_US').trim();
+
+  if (!accessToken || !phoneNumberId || !adminTo) {
+    console.warn('WhatsApp order alert skipped: WhatsApp environment variables are not configured.');
+    return;
+  }
+
+  const apiVersion = String(process.env.WHATSAPP_API_VERSION || 'v23.0').trim();
+  const url = `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(phoneNumberId)}/messages`;
+  const orderItems = Array.isArray(order.items)
+    ? order.items.map((item: any) => `${item.quantity}x ${item.itemName} — ₹${item.subtotal}`).join('\\n')
+    : '';
+  const body = [
+    '🔔 HOTEL MALABAR — NEW ORDER',
+    `Order: ${String(order.orderNumber || order.id || '')}`,
+    `Customer: ${String(order.customerName || '')}`,
+    `Phone: ${String(order.customerPhone || '')}`,
+    orderItems ? `Items:\\n${orderItems}` : '',
+    `Total: ₹${String(order.grandTotal ?? '')}`,
+    `Area: ${String(order.deliveryArea || '')}`,
+    `Address: ${String(order.deliveryAddress || '')}`,
+    'Payment: ' + String(order.paymentMethod || ''),
+  ].filter(Boolean).join('\\n');
+
+  const payload = templateName
+    ? {
+        messaging_product: 'whatsapp',
+        to: adminTo,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: templateLanguage },
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                { type: 'text', text: String(order.orderNumber || order.id || '') },
+                { type: 'text', text: String(order.customerName || '') },
+                { type: 'text', text: String(order.customerPhone || '') },
+                { type: 'text', text: orderItems || '-' },
+                { type: 'text', text: `₹${String(order.grandTotal ?? '')}` },
+                { type: 'text', text: String(order.deliveryArea || '') },
+              ],
+            },
+          ],
+        },
+      }
+    : {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: adminTo,
+        type: 'text',
+        text: { preview_url: false, body },
+      };
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn('WhatsApp order alert failed:', response.status, errorText.slice(0, 1000));
+      return;
+    }
+
+    console.log('Hotel Malabar WhatsApp order alert sent for', order.orderNumber || order.id);
+  } catch (err: any) {
+    console.warn('WhatsApp order alert request failed:', err?.message || err);
+  }
+}
+
 // Background order alerts are sent once when the order is created.
 // Do not run a repeating pending-order push loop: it can deliver a stale alert after acceptance.
 app.use(express.json({ limit: '35mb' }));
@@ -843,6 +941,7 @@ app.post('/api/orders', requireCustomerAuth, async (req: AuthenticatedRequest, r
     // Web Push remain as fallbacks for background/throttled browser sessions.
     broadcastAdminOrderEvent(order);
     void sendNewOrderPush(order);
+    void sendNewOrderWhatsApp(order);
 
     res.status(201).json({
       message: `Payment successful. Order ${order.orderNumber} placed successfully!`,
