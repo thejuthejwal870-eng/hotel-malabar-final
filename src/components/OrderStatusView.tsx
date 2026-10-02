@@ -282,7 +282,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
               minute: '2-digit',
               hour12: true,
             })}{' '}
-            • {String(order.paymentMethod || '').toLowerCase().includes('cashfree') ? 'Paid Online' : 'Cash on Delivery'}
+            • Paid Online
           </p>
         </div>
 
@@ -445,7 +445,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
                   Rider is on the way to <strong className="text-amber-300">{order.deliveryArea}</strong>!
                 </p>
                 <p className="text-[11px] text-amber-200/80 mt-1">
-                  Please keep exact cash ₹{order.grandTotal} ready for cash on delivery.
+                  Your payment was completed securely online through Cashfree.
                 </p>
               </div>
             )}
@@ -665,7 +665,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
               <span>Bill Summary</span>
             </span>
             <span className="bg-[#2a2118] text-[#e0d8c7] px-2 py-0.5 rounded font-mono text-[10px]">
-              Cash on Delivery
+              Paid Online
             </span>
           </div>
 
