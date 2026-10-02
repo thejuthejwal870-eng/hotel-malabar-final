@@ -191,6 +191,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   const [isSoundTesting, setIsSoundTesting] = useState(false);
   const [soundUploadError, setSoundUploadError] = useState<string | null>(null);
   const [soundSuccessToast, setSoundSuccessToast] = useState<string | null>(null);
+  const customSoundInputRef = useRef<HTMLInputElement | null>(null);
 
   // Audio alert banner for latest received order
   const [audioAlertBanner, setAudioAlertBanner] = useState<{
@@ -750,86 +751,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
   // Upload custom sound (Step 6)
   const handleCustomSoundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Always clear the input so selecting the same file again fires onChange.
+    e.target.value = '';
     if (!file) return;
 
     setSoundUploadError(null);
+    setSoundSuccessToast(null);
 
-    // Limit file size to 8MB
+    const allowedAudio = /^(audio\/|application\/ogg$)/i.test(file.type) ||
+      /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(file.name);
+
+    if (!allowedAudio) {
+      setSoundUploadError('Please select an audio file: MP3, WAV, OGG, M4A, AAC or FLAC.');
+      return;
+    }
+
     if (file.size > 8 * 1024 * 1024) {
       setSoundUploadError('Audio file is too large. Please select an audio file under 8MB.');
       return;
     }
 
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const audioData = reader.result as string;
-        const soundName = file.name;
-
-        // Apply immediately to local audio system
-        setCustomAudio(audioData, soundName);
-        setCurrentSoundName(soundName);
-        setHasCustomSound(true);
-
-        if (typeof window !== 'undefined') {
-          try {
-            localStorage.setItem('hm_admin_custom_sound_data', audioData);
-            localStorage.setItem('hm_admin_custom_sound_name', soundName);
-          } catch (err) {
-            console.warn('localStorage quota notice for sound:', err);
+      const audioData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          if (typeof result === 'string' && result.startsWith('data:')) {
+            resolve(result);
+          } else {
+            reject(new Error('The selected audio file could not be read.'));
           }
-        }
+        };
+        reader.onerror = () => reject(new Error('Failed to read the audio file.'));
+        reader.onabort = () => reject(new Error('Audio file selection was cancelled.'));
+        reader.readAsDataURL(file);
+      });
 
-        // Save to backend/cloud. Native background alerts read this exact stored
-        // data, so do not report success if the server did not save it.
-        if (!adminToken) {
-          setSoundUploadError('Admin session is not ready. Please sign in again before saving the alert sound.');
-          return;
-        }
-        const saveResponse = await fetch('/api/admin/sound-settings', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${adminToken}`,
-          },
-          body: JSON.stringify({ name: soundName, audioData }),
-        });
-        const saveData = await saveResponse.json().catch(() => ({}));
-        if (!saveResponse.ok) {
-          setSoundUploadError(saveData.error || 'The alert sound could not be saved to the server.');
-          return;
-        }
+      const soundName = file.name;
 
-        // Test the uploaded sound immediately. Native Android uses the same
-        // foreground-service player that handles real background orders.
-        setIsSoundTesting(true);
-        const nativePrinter = typeof window !== 'undefined' ? (window as any).AndroidPrinter : null;
-        if (
-          typeof document !== 'undefined' &&
-          document.body.classList.contains('native-admin-mobile') &&
-          nativePrinter?.playUploadedAlertSound
-        ) {
-          nativePrinter.playUploadedAlertSound();
-        } else {
-          unlockAudio();
-          playNewOrderChime();
-        }
-        setTimeout(() => setIsSoundTesting(false), 2500);
+      // Save to the server first. This is the authoritative copy used by the
+      // native Android alert service and by future website sessions.
+      if (!adminToken) {
+        setSoundUploadError('Admin session is not ready. Please sign in again before saving the alert sound.');
+        return;
+      }
 
-        setSoundSuccessToast(`Custom sound "${soundName}" uploaded and set active!`);
-        setTimeout(() => setSoundSuccessToast(null), 4000);
-      };
+      setIsSoundTesting(true);
+      const saveResponse = await fetch('/api/admin/sound-settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ name: soundName, audioData }),
+      });
 
-      reader.onerror = () => {
-        setSoundUploadError('Failed to read audio file. Please try another file.');
-      };
+      const saveData = await saveResponse.json().catch(() => ({}));
+      if (!saveResponse.ok) {
+        throw new Error(saveData.error || `Alert sound could not be saved (HTTP ${saveResponse.status}).`);
+      }
 
-      reader.readAsDataURL(file);
-    } catch (err) {
+      // Only mark the sound active after the cloud-backed save succeeds.
+      setCustomAudio(audioData, soundName);
+      setCurrentSoundName(soundName);
+      setHasCustomSound(true);
+
+      try {
+        localStorage.setItem('hm_admin_custom_sound_data', audioData);
+        localStorage.setItem('hm_admin_custom_sound_name', soundName);
+      } catch (err) {
+        // Local storage is only a cache; the server copy is authoritative.
+        console.warn('Custom sound local cache notice:', err);
+      }
+
+      // Preview the exact uploaded sound immediately on the website.
+      unlockAudio();
+      playNewOrderChime();
+
+      setSoundSuccessToast(`Custom sound "${soundName}" uploaded and saved successfully!`);
+      setTimeout(() => setSoundSuccessToast(null), 4000);
+      setTimeout(() => setIsSoundTesting(false), 2500);
+    } catch (err: any) {
       console.error('Sound upload error:', err);
-      setSoundUploadError('Failed to process custom sound file.');
-    } finally {
-      e.target.value = '';
+      setIsSoundTesting(false);
+      setSoundUploadError(err?.message || 'Failed to upload the custom sound. Please try again.');
     }
   };
 
@@ -2609,8 +2614,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                     <button
                       type="button"
                       onClick={() => {
-                        const input = document.getElementById('hotel-malabar-custom-sound-input') as HTMLInputElement | null;
-                        input?.click();
+                        customSoundInputRef.current?.click();
                       }}
                       className="bg-[#143d26] hover:bg-[#1a4e31] border border-[#dfb64c]/50 hover:border-[#dfb64c] text-[#dfb64c] hover:text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
                     >
@@ -2622,7 +2626,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
                       type="file"
                       accept="audio/*,.mp3,.wav,.ogg,.m4a"
                       onChange={handleCustomSoundUpload}
-                      className="hidden"
+                      ref={customSoundInputRef}
+                      className="absolute w-px h-px opacity-0 pointer-events-none"
                       aria-label="Upload custom alert sound"
                     />
                   </>
@@ -4506,17 +4511,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToCustomer
               {/* ACTION CONTROLS: Upload Custom Sound, Test Sound, Reset to Default */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* 1. Upload Custom Sound */}
-                <label className="relative flex flex-col items-center justify-center p-4 rounded-xl border border-dashed border-[#dfb64c]/70 hover:border-[#dfb64c] bg-[#123620]/60 hover:bg-[#123620] text-center cursor-pointer transition-all group">
+                <button
+                  type="button"
+                  onClick={() => customSoundInputRef.current?.click()}
+                  className="relative flex flex-col items-center justify-center p-4 rounded-xl border border-dashed border-[#dfb64c]/70 hover:border-[#dfb64c] bg-[#123620]/60 hover:bg-[#123620] text-center cursor-pointer transition-all group"
+                >
                   <Upload className="w-6 h-6 text-[#dfb64c] mb-1.5 group-hover:scale-110 transition-transform" />
                   <span className="text-xs font-bold text-[#dfb64c]">Upload Custom Sound</span>
                   <span className="text-[10px] text-[#8ea896] mt-0.5">MP3, WAV, OGG, M4A (Max 8MB)</span>
-                  <input
-                    type="file"
-                    accept="audio/*,.mp3,.wav,.ogg,.m4a"
-                    onChange={handleCustomSoundUpload}
-                    className="sr-only"
-                  />
-                </label>
+                </button>
 
                 {/* 2. Test Sound */}
                 <button
