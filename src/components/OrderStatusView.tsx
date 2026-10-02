@@ -282,7 +282,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onClo
               minute: '2-digit',
               hour12: true,
             })}{' '}
-            • Cash on Delivery
+            • {String(order.paymentMethod || '').toLowerCase().includes('cashfree') ? 'Paid Online' : 'Cash on Delivery'}
           </p>
         </div>
 
